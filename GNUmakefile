@@ -74,6 +74,7 @@ LD	:= $(GCCPREFIX)ld
 OBJCOPY	:= $(GCCPREFIX)objcopy
 OBJDUMP	:= $(GCCPREFIX)objdump
 NM	:= $(GCCPREFIX)nm
+GDB	:= $(GCCPREFIX)gdb
 
 # Native commands
 NCC	:= gcc $(CC_VER) -pipe
@@ -203,33 +204,44 @@ grade:
 	  (echo "'make clean' failed.  HINT: Do you have another running instance of JOS?" && exit 1)
 	./grade-lab$(LAB) $(GRADEFLAGS)
 
-git-handin: handin-check
-	@if test -n "`git config remote.handin.url`"; then \
-		echo "Hand in to remote repository using 'git push handin HEAD' ..."; \
-		if ! git push -f handin HEAD; then \
-            echo ; \
-			echo "Hand in failed."; \
-			echo "As an alternative, please run 'make tarball'"; \
-			echo "and visit http://pdos.csail.mit.edu/6.828/submit/"; \
-			echo "to upload lab$(LAB)-handin.tar.gz.  Thanks!"; \
-			false; \
+# Notify that a lab has been submitted 
+# Provide user, lab #, and commit ID 
+
+handin: handin-check
+	SUF=$(LAB); \
+	if test $(LAB) -eq 3 -o $(LAB) -eq 4; then \
+		read -p "Which part would you like to submit? [a, b, c (c for lab 4 only)]" p; \
+		if test "$$p" != a -a "$$p" != b; then \
+			if test ! $(LAB) -eq 4 -o ! "$$p" = c; then \
+				echo "Bad part \"$$p\""; \
+				exit 1; \
+			fi; \
 		fi; \
-    else \
-		echo "Hand-in repository is not configured."; \
-		echo "Please run 'make handin-prep' first.  Thanks!"; \
+		SUF="$(LAB)$$p"; \
+	fi; \
+	if ! git push ; then \
+		echo ; \
+		echo "Git pushfailed."; \
 		false; \
+	else \
+		commit_id=`git rev-parse --short HEAD`; \
+		repository=`git remote -v | grep origin.*push`; \
+		username=`git config user.name`; \
+		lab="lab$$SUF"; \
+		curl -G \
+			--data-urlencode "value1=$$repository $$username" \
+			--data-urlencode "value2=$$lab" \
+			--data-urlencode "value3=$$commit_id" \
+			"https://maker.ifttt.com/trigger/lab_submitted/with/key/bN1lPH8A7M-VnPM8r3rvXi"; \
+		echo ; \
+		tag="$$lab-submittal"; \
+		git tag --delete "$$tag"; \
+		git push origin :"$$tag";\
+		git tag -a "$$tag" -m "Submital for Lab $$SUF"; \
+		git push origin --tags ;\
 	fi
 
-WEBSUB := https://6828.scripts.mit.edu/2018/handin.py
 
-handin: tarball-pref myapi.key
-	@SUF=$(LAB); \
-	test -f .suf && SUF=`cat .suf`; \
-	curl -f -F file=@lab$$SUF-handin.tar.gz -F key=\<myapi.key $(WEBSUB)/upload \
-	    > /dev/null || { \
-		echo ; \
-		echo Submit seems to have failed.; \
-		echo Please go to $(WEBSUB)/ and upload the tarball manually.; }
 
 handin-check:
 	@if ! test -d .git; then \
@@ -253,50 +265,6 @@ handin-check:
 		test "$$r" = y; \
 	fi
 
-UPSTREAM := $(shell git remote -v | grep "pdos.csail.mit.edu/6.828/2018/jos.git (fetch)" | awk '{split($$0,a," "); print a[1]}')
-
-tarball-pref: handin-check
-	@SUF=$(LAB); \
-	if test $(LAB) -eq 3 -o $(LAB) -eq 4; then \
-		read -p "Which part would you like to submit? [a, b, c (c for lab 4 only)]" p; \
-		if test "$$p" != a -a "$$p" != b; then \
-			if test ! $(LAB) -eq 4 -o ! "$$p" = c; then \
-				echo "Bad part \"$$p\""; \
-				exit 1; \
-			fi; \
-		fi; \
-		SUF="$(LAB)$$p"; \
-		echo $$SUF > .suf; \
-	else \
-		rm -f .suf; \
-	fi; \
-	git archive --format=tar HEAD > lab$$SUF-handin.tar; \
-	git diff $(UPSTREAM)/lab$(LAB) > /tmp/lab$$SUF-diff.patch; \
-	tar -rf lab$$SUF-handin.tar /tmp/lab$$SUF-diff.patch; \
-	gzip -c lab$$SUF-handin.tar > lab$$SUF-handin.tar.gz; \
-	rm lab$$SUF-handin.tar; \
-	rm /tmp/lab$$SUF-diff.patch; \
-
-myapi.key:
-	@echo Get an API key for yourself by visiting $(WEBSUB)/
-	@read -p "Please enter your API key: " k; \
-	if test `echo "$$k" |tr -d '\n' |wc -c` = 32 ; then \
-		TF=`mktemp -t tmp.XXXXXX`; \
-		if test "x$$TF" != "x" ; then \
-			echo "$$k" |tr -d '\n' > $$TF; \
-			mv -f $$TF $@; \
-		else \
-			echo mktemp failed; \
-			false; \
-		fi; \
-	else \
-		echo Bad API key: $$k; \
-		echo An API key should be 32 characters long.; \
-		false; \
-	fi;
-
-#handin-prep:
-#	@./handin-prep
 
 
 # This magic automatically generates makefile dependencies
