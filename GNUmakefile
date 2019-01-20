@@ -207,7 +207,7 @@ grade:
 # Provide user, lab #, and commit ID 
 
 handin: handin-check
-	@SUF=$(LAB); \
+	SUF=$(LAB); \
 	if test $(LAB) -eq 3 -o $(LAB) -eq 4; then \
 		read -p "Which part would you like to submit? [a, b, c (c for lab 4 only)]" p; \
 		if test "$$p" != a -a "$$p" != b; then \
@@ -226,7 +226,7 @@ handin: handin-check
 		commit_id=`git rev-parse --short HEAD`; \
 		repository=`git remote -v | grep origin.*push`; \
 		username=`git config user.name`; \
-		lab="lab$(SUF)"; \
+		lab="lab$$SUF"; \
 		curl -G \
 			--data-urlencode "value1=$$repository $$username" \
 			--data-urlencode "value2=$$lab" \
@@ -236,7 +236,7 @@ handin: handin-check
 		tag="$$lab-submittal"; \
 		git tag --delete "$$tag"; \
 		git push origin :"$$tag";\
-		git tag -a "$$tag" -m "Submital for Lab $(SUF)"; \
+		git tag -a "$$tag" -m "Submital for Lab $$SUF"; \
 		git push origin --tags ;\
 	fi
 
