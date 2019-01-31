@@ -235,10 +235,15 @@ handin: handin-check
 			"https://maker.ifttt.com/trigger/lab_submitted/with/key/bN1lPH8A7M-VnPM8r3rvXi"; \
 		echo ; \
 		tag="$$lab-submittal"; \
-		git tag --delete "$$tag"; \
-		git push origin :"$$tag";\
-		git tag -a "$$tag" -m "Submital for Lab $$SUF"; \
-		git push origin --tags ;\
+		                git tag -l "$$tag" | grep -q "$$tag"; \
+                if [ $$? == 0 ]; \
+                then \
+                        git tag --delete "$$tag"; \
+                        git push origin :"$$tag"; \
+                fi; \
+                git tag -a "$$tag" -m "Submital for Lab $$SUF"; \
+                git push origin --tags ;\
+                echo "handin successful!"; \
 	fi
 
 
