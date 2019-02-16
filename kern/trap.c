@@ -95,8 +95,9 @@ trap_init_percpu(void)
 	//     rather than the global "ts" variable;
 	//   - Use gdt[(GD_TSS0 >> 3) + i] for CPU i's TSS descriptor;
 	//   - You mapped the per-CPU kernel stacks in mem_init_mp()
-	//   - Initialize cpu_ts.ts_iomb to prevent unauthorized environments
-	//     from doing IO (0 is not the correct value!)
+	//   - You won't want to load GD_TSS0: that's the GD_TSS for cpu 0.
+	//     The definition of gdt[] shows where the GD_TSSes are stored for
+	//     other cpus.
 	//
 	// ltr sets a 'busy' flag in the TSS selector, so if you
 	// accidentally load the same TSS on more than one CPU, you'll
