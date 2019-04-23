@@ -205,7 +205,7 @@ def test_echosrv():
                     break
                 got += data
         except socket.error as e:
-            got += "[Socket error: %s]" % e
+            got.extend(("[Socket error: %s]" % e).encode())
         finally:
             sock.close()
         assert_equal(got, expect)
