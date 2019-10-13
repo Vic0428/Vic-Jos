@@ -34,7 +34,9 @@ i386_init(void)
 	cons_init();
 
 	cprintf("6828 decimal is %o octal!\n", 6828);
-
+	cprintf("%m%s\n", 0x0100, "blue");
+	cprintf("%m%s\n", 0x0200, "green");
+	cprintf("%m%s\n", 0x0400, "red");
 	// Test the stack backtrace function (lab 1 only)
 	test_backtrace(5);
 

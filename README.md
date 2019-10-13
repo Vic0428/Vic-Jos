@@ -138,6 +138,196 @@ Reset the machine (exit QEMU/GDB and start them again). Examine the 8 words of m
 
 At the first break point, it will all be 0’s. It’s because that the kernel hasn’t been loader.  And at the second break point, it will contain information about kernel. 
 
+### Exercise 7
+
+#### Question
+
+Use QEMU and GDB to trace into the JOS kernel and stop at the `movl %eax, %cr0`. Examine memory at 0x00100000 and at 0xf0100000. Now, single step over that instruction using the stepi GDB command. Again, examine memory at 0x00100000 and at 0xf0100000. Make sure you understand what just happened.
+
+What is the first instruction *after* the new mapping is established that would fail to work properly if the mapping weren't in place? Comment out the `movl %eax, %cr0` in `kern/entry.S`, trace into it, and see if you were right.
+
+#### Answer
+
+In `gdb`, use following command to examine before `movl %eax, %cr0`
+
+```
+b *0x00100020
+x/8w 0x00100000
+x/8w 0xf0100000
+```
+
+*Before*, examine memory at 0x00100000 (the kernel data)
+
+```
+0x100000:       0x1badb002      0x00000000      0xe4524ffe      0x7205c766
+0x100010:       0x34000004      0x0000b812      0x220f0011      0xc0200fd8
+```
+
+Examine memory at 0xf0100000 (unmapped now)
+
+```
+0xf010000:      0x00000000      0x00000000      0x00000000      0x00000000
+0xf010010:      0x00000000      0x00000000      0x00000000      0x00000000
+```
+
+*After*, examine memory at 0x00100000 (the kernel data)
+
+```
+0x100000:       0x1badb002      0x00000000      0xe4524ffe      0x7205c766
+0x100010:       0x34000004      0x0000b812      0x220f0011      0xc0200fd8
+```
+
+Examine memory at 0xf0100000 (already mapped now)
+
+```
+0xf0100000: 		0x1badb002      0x00000000      0xe4524ffe      0x7205c766
+0xf0100010:   	0x34000004      0x0000b812      0x220f0011      0xc0200fd8
+```
+
+So we can find that  virtual address [0xf0000000, 0xf0400000] mapped to physical addresses [0x00000000,  0x00400000]. 
+
+Similarly virtual address [0x00000000, 0x00400000] also are mapped to the same physical address range. 
+
+If we comment our the `movl %eax, %cr0`, the next instructions will jump to address `0xf010002c`
+
+```assembly
+mov	$relocated, %eax
+jmp	*%eax
+```
+
+But the address `0xf010002c` is still unmapped, so it still is 0’s. So it will cause an error!
+
+### Exercise 8
+
+#### Question
+
+We have omitted a small fragment of code - the code necessary to print octal numbers using patterns of the form "%o". Find and fill in this code fragment.
+
+And answer following questions
+
+- Explain the interface between `printf.c` and `console.c`. Specifically, what function does `console.c` export? How is this function used by `printf.c`?
+
+- Explain the following from `console.c`
+
+  ```c++
+  if (crt_pos >= CRT_SIZE) {
+    int i;
+    memmove(crt_buf, crt_buf + CRT_COLS, (CRT_SIZE - CRT_COLS) * sizeof(uint16_t));
+    for (i = CRT_SIZE - CRT_COLS; i < CRT_SIZE; i++)
+    crt_buf[i] = 0x0700 | ' ';
+    crt_pos -= CRT_COLS;
+  }
+  ```
+
+- For the following questions you might wish to consult the notes for Lecture 2. These notes cover GCC's calling convention on the x86.
+
+  Trace the execution of the following code step-by-step:
+
+  ```c++
+  int x = 1, y = 3, z = 4;
+  cprintf("x %d, y %x, z %d\n", x, y, z);
+  ```
+
+  - In the call to `cprintf()`, to what does `fmt` point? To what does `ap` point?
+  - List (in order of execution) each call to `cons_putc`, `va_arg`, and `vcprintf`. For `cons_putc`, list its argument as well. For `va_arg`, list what `ap` points to before and after the call. For `vcprintf` list the values of its two arguments.
+
+- Run the following code.
+
+  ```c
+  unsigned int i = 0x00646c72;
+  cprintf("H%x Wo%s", 57616, &i);
+  ```
+
+  What is the output? Explain how this output is arrived at in the step-by-step manner of the previous exercise. [Here's an ASCII table](https://web.archive.org/web/20160304171108/http://web.cs.mun.ca/~michael/c/ascii-table.html)
+
+  The output depends on that fact that the x86 is little-endian. If the x86 were instead big-endian what would you set `i` to in order to yield the same output? Would you need to change `57616` to a different value?
+
+- In the following code, what is going to be printed after `'y='`
+
+  ```c
+  cprintf("x=%d y=%d", 3);
+  ```
+
+### Answer
+
+Fill the code fragment
+
+```c
+// (unsigned) octal
+case 'o':
+  num = getuint(&ap, lflag);
+  base = 8;
+  goto number;
+```
+
+- `console.c` use function `cprinf()` provided by `printf.c`. 
+
+- If the console is full of characters, remove the first row and move to a new row. 
+
+  - `fmt` points to `"x %d, y %x, z %d\n”` and `ap` points to `0xf010ffd4`
+
+  - `vcprintf()` the arguments
+
+    ```c++
+    vcprintf (fmt=0xf01017b2 "x %d, y %x, z %d\n", ap=0xf010ffd4 "\001")
+    ```
+
+    `consputc()` argument: 120 (when print the first `x`)
+
+    `va_arg`, after the first call `ap` points to ` 0xf010ffd8 `. 
+
+- The output will be `He110 World`. 
+  57616 => e110 in hex
+  Little endian `i = 0x00646c72`, will be bytes sequence in memory `72 6c 64 00`. 
+  `72` in hex will be r, `6c` in hex will be l, `6d` in hex will be d. `00` will be `\0` . 
+  If big endian, we need to change `i = 0x726c6400`. No need to change 5676
+
+- In my experiment, it is `y=1600`, because what `ap` points now is unknown. 
+
+- Create new file `inc/textcolor.h` and add a new global variable `textcolor`
+  Modify `printfmt.c` 
+
+  ```c++
+  while ((ch = *(unsigned char *) fmt++) != '%') {
+    textcolor = 0x0700;
+    if (ch == '\0')
+    return;
+    putch(ch, putdat);
+    // Process a %-escape sequence
+    padc = ' ';
+    width = -1;
+    precision = -1;
+    lflag = 0;
+    altflag = 0;
+  	reswitch:
+  		switch (ch = *(unsigned char *) fmt++) {
+  
+  		// 'm' means to set color
+  		case 'm':
+  			textcolor = getint(&ap, lflag);
+  			break;
+      ....
+      }
+  ```
+
+  Modify console.c
+
+  ```c++
+  static void
+  cga_putc(int c)
+  {
+  	// if no attribute given, then use black on white
+  	if (!(c & ~0xFF)) {
+  		c |= textcolor;
+  	}
+    ...
+  }
+  ```
+
+  Finally ...
+
+  <img src="README.assets/image-20191013175158746.png" alt="image-20191013175158746" style="zoom:33%;" />
+
 ## Reference
 
 - [Setting Up Environment](https://www.cs.hmc.edu/~rhodes/courses/cs134/sp19/tools.html)
