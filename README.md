@@ -324,7 +324,15 @@ case 'o':
   }
   ```
 
-  Finally ...
+  Finally, add code in function `i386_init()` in `init.c`. 
+
+  ```c
+  cprintf("%m%s\n", 0x0100, "blue");
+  cprintf("%m%s\n", 0x0200, "green");
+  cprintf("%m%s\n", 0x0400, "red");
+  ```
+
+   
 
   <img src="README.assets/image-20191013175158746.png" alt="image-20191013175158746" style="zoom:33%;" />
 
@@ -332,3 +340,4 @@ case 'o':
 
 - [Setting Up Environment](https://www.cs.hmc.edu/~rhodes/courses/cs134/sp19/tools.html)
 - [GCC-Inline-Assembly](http://www.ibiblio.org/gferg/ldp/GCC-Inline-Assembly-HOWTO.html)
+- [HMC Lab1 Guide](https://www.cs.hmc.edu/~rhodes/courses/cs134/sp19/labs/lab1.html)
