@@ -24,6 +24,7 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{"backtrace", "Stack Backtrace implemented by Vic", mon_backtrace}
 };
 
 /***** Implementations of basic kernel monitor commands *****/
@@ -57,7 +58,52 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
-	// Your code here.
+	int ebp;
+	int eip;
+	cprintf("Stack backtrace:\n");
+	// First get the base pointer address
+	asm(
+		"movl %%ebp, %0"
+		:"=r"(ebp)
+		:
+		:
+	);
+	while (ebp != 0) {
+		// Get eip address
+		asm(
+			"movl 4(%1), %0"
+			:"=r"(eip)
+			:"r"(ebp)
+			:
+		);
+		int arg[5];
+		int curAddr = ebp + 4;
+		// Get Args value
+		for (int i = 0; i < 5; i++) {
+			asm(
+				"movl 4(%1), %0"
+				:"=r"(arg[i])
+				:"r"(curAddr)
+				:
+			);
+			curAddr += 4;
+		}
+		// Get debug info
+		struct Eipdebuginfo info;
+		debuginfo_eip(eip, &info);
+		// Display debug info
+		cprintf("  ebp %08x eip %08x args %08x %08x %08x %08x %08x\n", ebp, eip, arg[0], arg[1], arg[2], arg[3], arg[4]);
+		// Display file and function info	
+		cprintf("    %s:%d: %.*s+%d\n", info.eip_file, info.eip_line, info.eip_fn_namelen, info.eip_fn_name, eip - info.eip_fn_addr);
+		// Update base pointer
+		asm(
+			"movl (%1), %%eax;"
+			"movl %%eax, %0;"
+			:"=r"(ebp)
+			:"r"(ebp)
+			:"%eax"
+		);
+	}
 	return 0;
 }
 
