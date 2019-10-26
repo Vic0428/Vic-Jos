@@ -105,6 +105,10 @@ boot_alloc(uint32_t n)
 	result = nextfree;
 	// Update nextfree
 	nextfree = ROUNDUP((char *)(nextfree + n), PGSIZE);
+	// Handle out of memory
+	if ((int)nextfree > (KERNBASE + npages * PGSIZE)) {
+		panic("Out of memory!\n");
+	}
 	return result;
 }
 
@@ -252,6 +256,7 @@ page_init(void)
 	size_t i;
 
 	// Page 0 in use for bootloader data structure
+	pages[0].pp_ref = 1;
 	// Page [PGSIZE, npages_basemem * PGSIZE] is free
 	for (i = 1; i < npages_basemem; i++) {
 		pages[i].pp_ref = 0;
@@ -259,6 +264,9 @@ page_init(void)
 		page_free_list = &pages[i];
 	}
 	// Pages from [IOPHYSMEM, EXTPHYSMEM) allocated
+	for (i = npages_basemem; i < EXTPHYSMEM / PGSIZE; i++) {
+		pages[i].pp_ref = 1;
+	}
 	// Pages from [address / PGSIZE, npages] free
 	size_t address= PADDR((void*)(pages + npages));
 	for (int i = address / PGSIZE; i < npages; ++i) {
