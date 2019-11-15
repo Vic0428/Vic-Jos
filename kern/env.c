@@ -114,9 +114,15 @@ envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 void
 env_init(void)
 {
+	env_free_list = envs;
 	// Set up envs array
-	// LAB 3: Your code here.
-
+	for (unsigned int i = 0; i < NENV - 1; i--) {
+		envs[i].env_id = 0;
+		envs[i].env_link = &envs[i+1];
+	}
+	// The end of the link
+	envs[NENV - 1].env_id = 0;
+	envs[NENV - 1].env_link = NULL;
 	// Per-CPU part of the initialization
 	env_init_percpu();
 }
@@ -177,13 +183,20 @@ env_setup_vm(struct Env *e)
 	//	is an exception -- you need to increment env_pgdir's
 	//	pp_ref for env_free to work correctly.
 	//    - The functions in kern/pmap.h are handy.
-
-	// LAB 3: Your code here.
-
+	
+	// The VA space above UTOP is identiccal
+	e->env_pgdir = page2kva(p);
+	for (unsigned int i = PDX(UTOP); i * sizeof(pde_t) < PGSIZE; i++) {
+		e->env_pgdir[i] = kern_pgdir[i];
+	}
+	for (unsigned int i = 0; i < PDX(UTOP); i++) {
+		e->env_pgdir[i] = 0;
+	}
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
 	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
 
+	p->pp_ref += 1;
 	return 0;
 }
 
@@ -267,6 +280,18 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+	struct PageInfo *p = NULL;
+	va = ROUNDDOWN(va, PGSIZE);
+	void *end = ROUNDUP(va + len, PGSIZE);
+	// Map pages!
+	for (int i = 0; i < end - va; i += PGSIZE) {
+		pte_t *pte = pgdir_walk(e->env_pgdir, (void *)(va + i), 1);
+		if (pte == NULL) {
+			panic("Memory out!");
+		}
+		p = page_alloc(0);
+		*pte = page2pa(p) | PTE_P | PTE_U | PTE_W;
+	}
 }
 
 //

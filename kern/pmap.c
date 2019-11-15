@@ -135,7 +135,6 @@ mem_init(void)
 	// create initial page directory.
 	kern_pgdir = (pde_t *) boot_alloc(PGSIZE);
 	memset(kern_pgdir, 0, PGSIZE);
-
 	//////////////////////////////////////////////////////////////////////
 	// Recursively insert PD in itself as a page table, to form
 	// a virtual page table at virtual address UVPT.
@@ -154,9 +153,13 @@ mem_init(void)
 	// Your code goes here:
 	pages = (struct PageInfo *) boot_alloc(npages * sizeof(struct PageInfo));
 	memset(pages, 0, npages * sizeof(struct PageInfo));
+
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 3: Your code here.
+	n = ROUNDUP(NENV*sizeof(struct Env), PGSIZE);
+	envs = (struct Env *) boot_alloc(n);
+	memset(envs, 0, n);
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -188,6 +191,7 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 3: Your code here.
+	boot_map_region(kern_pgdir, UENVS, n, PADDR(envs), PTE_U);
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -281,7 +285,9 @@ page_init(void)
 		pages[i].pp_ref = 1;
 	}
 	// Pages from [address / PGSIZE, npages] free
-	size_t address= PADDR((void*)(pages + npages));
+	// size_t address= PADDR((void*)(pages + npages));
+	size_t address= PADDR((void*)(boot_alloc(0)));
+	// size_t address= PADDR((void*));
 	for (int i = address / PGSIZE; i < npages; ++i) {
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
@@ -639,6 +645,7 @@ check_page_free_list(bool only_low_memory)
 		assert(page2pa(pp) != IOPHYSMEM);
 		assert(page2pa(pp) != EXTPHYSMEM - PGSIZE);
 		assert(page2pa(pp) != EXTPHYSMEM);
+		// cprintf("pp: %p\n first_free_page: %p\n", page2kva(pp), first_free_page);
 		assert(page2pa(pp) < EXTPHYSMEM || (char *) page2kva(pp) >= first_free_page);
 
 		if (page2pa(pp) < EXTPHYSMEM)
@@ -654,7 +661,7 @@ check_page_free_list(bool only_low_memory)
 }
 
 //
-// Check the physical page allocator (page_alloc(), page_free(),
+// Check the physical page allcator (page_alloc(), page_free(),
 // and page_init()).
 //
 static void
