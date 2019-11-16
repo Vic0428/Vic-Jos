@@ -198,7 +198,8 @@ trap_dispatch(struct Trapframe *tf)
 		break;
 
 		case T_SYSCALL:
-		syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+		// Store in return value
+		tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
 		break;	
 	default:
 		if (tf->tf_cs == GD_KT)
@@ -259,9 +260,10 @@ page_fault_handler(struct Trapframe *tf)
 	// Handle kernel-mode page faults.
 
 	if (tf->tf_cs == GD_KT) {
-		struct PageInfo *pp = page_alloc(ALLOC_ZERO);
-		page_insert(kern_pgdir, pp, (void *)fault_va, PTE_W);
-		return;
+		// struct PageInfo *pp = page_alloc(ALLOC_ZERO);
+		// page_insert(kern_pgdir, pp, (void *)fault_va, PTE_W);
+		// return;
+		panic("NOOOOO!");
 	}
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.

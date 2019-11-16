@@ -124,7 +124,6 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	info->eip_fn_namelen = 9;
 	info->eip_fn_addr = addr;
 	info->eip_fn_narg = 0;
-
 	// Find the relevant set of stabs
 	if (addr >= ULIM) {
 		stabs = __STAB_BEGIN__;
@@ -142,14 +141,22 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 		// Make sure this memory is valid.
 		// Return -1 if it is not.  Hint: Call user_mem_check.
 		// LAB 3: Your code here.
+		if (user_mem_check(curenv, (void *)usd, sizeof(struct UserStabData), PTE_W | PTE_U) < 0) {
+			return -1;
+		}
 
 		stabs = usd->stabs;
 		stab_end = usd->stab_end;
 		stabstr = usd->stabstr;
 		stabstr_end = usd->stabstr_end;
 
-		// Make sure the STABS and string table memory is valid.
-		// LAB 3: Your code here.
+		if (user_mem_check(curenv, (void *)stabs, stab_end - stabs, PTE_W | PTE_U) < 0) {
+			return -1;
+		}
+
+		if (user_mem_check(curenv, (void *)stabstr, stabstr_end - stabstr, PTE_W | PTE_U) < 0) {
+			return -1;
+		}
 	}
 
 	// String table validity checks

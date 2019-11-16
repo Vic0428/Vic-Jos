@@ -570,8 +570,22 @@ static uintptr_t user_mem_check_addr;
 //
 int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
-{
-	// LAB 3: Your code here.
+{	
+	// Align to page
+	const void* end = ROUNDUP(va + len, PGSIZE);
+	const void* begin = ROUNDDOWN(va, PGSIZE);
+	// Check each virtual address
+	for (void *ptr = (void *)begin; ptr < end; ptr += PGSIZE) {
+		pte_t *pte = pgdir_walk(curenv->env_pgdir, ptr, 0);
+		if ((uint32_t)ptr >= ULIM || !pte || (*pte & (perm | PTE_P)) != (perm | PTE_P)) {
+			if (ptr == begin) {
+				user_mem_check_addr = (uintptr_t)va;
+			} else {
+				user_mem_check_addr = (uintptr_t)ptr;
+			}
+			return -E_FAULT;
+		}
+	}
 
 	return 0;
 }
