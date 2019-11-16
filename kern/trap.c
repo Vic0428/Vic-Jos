@@ -87,7 +87,7 @@ trap_init(void)
     SETGATE(idt[T_DIVIDE], 0, GD_KT, divide_handler, 0);
     SETGATE(idt[T_DEBUG], 0, GD_KT, debug_handler, 0);
     SETGATE(idt[T_NMI], 0, GD_KT, nmi_handler, 0);
-    SETGATE(idt[T_BRKPT], 0, GD_KT, brkpt_handler, 0);
+    SETGATE(idt[T_BRKPT], 0, GD_KT, brkpt_handler, 3);
     SETGATE(idt[T_OFLOW], 0, GD_KT, oflow_handler, 0);
     SETGATE(idt[T_BOUND], 0, GD_KT, bound_handler, 0);
     SETGATE(idt[T_DEVICE], 0, GD_KT, device_handler, 0);
@@ -185,10 +185,18 @@ trap_dispatch(struct Trapframe *tf)
 	// Page fault
 	switch (tf->tf_trapno)
 	{
+		// Page Fault Handler
 		case T_PGFLT:
 		page_fault_handler(tf);
 		break;
-	
+
+		// Break Point Handler
+		case T_BRKPT:
+		while (1) {
+			monitor(NULL);
+		}
+		
+		break;	
 	default:
 		if (tf->tf_cs == GD_KT)
 			panic("unhandled trap in kernel");
