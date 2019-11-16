@@ -292,3 +292,119 @@ env_run(struct Env *e)
 
 
 
+### Exercise3
+
+#### Question
+
+ Read Chapter 5 of the [IA-32 Developer's Manual](https://www.cs.hmc.edu/~rhodes/courses/cs134/sp19/readings/ia32/IA32-3A.pdf) if you haven't already.
+
+#### Answer
+
+Carefully read the book!
+
+### Exercise 4
+
+#### Question
+
+Edit `trapentry.S` and `trap.c` and implement the features described above. The macros `TRAPHANDLER` and `TRAPHANDLER_NOEC` in `trapentry.S` should help you, as well as the T_* defines in `inc/trap.h`. You will need to add an entry point in `trapentry.S` (using those macros) for each trap defined in `inc/trap.h`, and you'll have to provide `_alltraps` which the `TRAPHANDLER` macros refer to. You will also need to modify `trap_init()` to initialize the `idt` to point to each of these entry points defined in `trapentry.S`; the `SETGATE` macro will be helpful here.
+
+Your `_alltraps` should:
+
+1. push values to make the stack look like a struct Trapframe
+2. load `GD_KD` into `%ds` and `%es`
+3. `pushl %esp` to pass a pointer to the Trapframe as an argument to trap()
+4. `call trap` (can `trap` ever return?)
+
+Consider using the `pushal` instruction; it fits nicely with the layout of the `struct Trapframe`.
+
+Test your trap handling code using some of the test programs in the `user` directory that cause exceptions before making any system calls, such as `user/divzero`. You should be able to get make grade to succeed on the `divzero`, `softint`, and `badsegment` tests at this point.
+
+#### Answer
+
+Modify `trapentry.s` 
+
+```asm
+TRAPHANDLER_NOEC(divide_handler, 0)
+TRAPHANDLER_NOEC(debug_handler, 1)
+TRAPHANDLER_NOEC(nmi_handler, 2)
+TRAPHANDLER_NOEC(brkpt_handler, 3)
+TRAPHANDLER_NOEC(oflow_handler, 4)
+TRAPHANDLER_NOEC(bound_handler, 5)
+TRAPHANDLER_NOEC(device_handler, 7)
+TRAPHANDLER_NOEC(illop_handler, 6)
+TRAPHANDLER(dblflt_handler, 8)
+TRAPHANDLER(tss_handler, 10)
+TRAPHANDLER(segnp_handler, 11)
+TRAPHANDLER(stack_handler, 12)
+TRAPHANDLER(gpflt_handler, 13)
+TRAPHANDLER(pgflt_handler, 14)
+TRAPHANDLER_NOEC(fperr_handler, 16)
+TRAPHANDLER(align_handler, 17)
+TRAPHANDLER_NOEC(mchk_handler, 18)
+TRAPHANDLER_NOEC(simderr_handler, 19)
+TRAPHANDLER_NOEC(syscall_handler, 48)
+```
+
+Modify `trap_init()` function in `trap.c`
+
+```c++
+void
+trap_init(void)
+{
+	extern struct Segdesc gdt[];
+	// LAB 3: Your code here.
+	void divide_handler();
+	void debug_handler();
+	void nmi_handler();
+	void brkpt_handler();
+	void oflow_handler();
+	void bound_handler();
+	void device_handler();
+	void illop_handler();
+	void tss_handler();
+	void segnp_handler();
+	void stack_handler();
+	void gpflt_handler();
+	void pgflt_handler();
+	void fperr_handler();
+	void align_handler();
+	void mchk_handler();
+	void simderr_handler();
+	void syscall_handler();
+	void dblflt_handler();
+
+  SETGATE(idt[T_DIVIDE], 0, GD_KT, divide_handler, 0);
+  SETGATE(idt[T_DEBUG], 0, GD_KT, debug_handler, 0);
+  SETGATE(idt[T_NMI], 0, GD_KT, nmi_handler, 0);
+  SETGATE(idt[T_BRKPT], 0, GD_KT, brkpt_handler, 0);
+  SETGATE(idt[T_OFLOW], 0, GD_KT, oflow_handler, 0);
+  SETGATE(idt[T_BOUND], 0, GD_KT, bound_handler, 0);
+  SETGATE(idt[T_DEVICE], 0, GD_KT, device_handler, 0);
+  SETGATE(idt[T_ILLOP], 0, GD_KT, illop_handler, 0);
+  SETGATE(idt[T_DBLFLT], 0, GD_KT, dblflt_handler, 0);
+  SETGATE(idt[T_TSS], 0, GD_KT, tss_handler, 0);
+  SETGATE(idt[T_SEGNP], 0, GD_KT, segnp_handler, 0);
+  SETGATE(idt[T_STACK], 0, GD_KT, stack_handler, 0);
+  SETGATE(idt[T_GPFLT], 0, GD_KT, gpflt_handler, 0);
+  SETGATE(idt[T_PGFLT], 0, GD_KT, pgflt_handler, 0);
+  SETGATE(idt[T_FPERR], 0, GD_KT, fperr_handler, 0);
+  SETGATE(idt[T_ALIGN], 0, GD_KT, align_handler, 0);
+  SETGATE(idt[T_MCHK], 0, GD_KT, mchk_handler, 0);
+  SETGATE(idt[T_SIMDERR], 0, GD_KT, simderr_handler, 0);
+  
+  SETGATE(idt[T_SYSCALL], 0, GD_KT, syscall_handler, 3);
+
+	// Per-CPU setup 
+	trap_init_percpu();
+}
+```
+
+#### Question
+
+1. What is the purpose of having an individual handler function for each exception/interrupt? (i.e., if all exceptions/interrupts were delivered to the same handler, what feature that exists in the current implementation could not be provided?)
+2. Did you have to do anything to make the `user/softint` program behave correctly? The grade script expects it to produce a general protection fault (trap 13), but `softint`'s code says `int $14`. *Why* should this produce interrupt vector 13? What happens if the kernel actually allows `softint`'s `int $14` instruction to invoke the kernel's page fault handler (which is interrupt vector 14)?
+
+### Answer
+
+1. Every interrupt should be handled differently. 
+2. Because current mode is user mode, if the code says `int $14`. It will cause *General Protection Exception*. 
