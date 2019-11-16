@@ -186,16 +186,7 @@ env_setup_vm(struct Env *e)
 	
 	// The VA space above UTOP is identiccal
 	e->env_pgdir = page2kva(p);
-	for (unsigned int i = UTOP; i - UTOP < -UTOP; i += PGSIZE) {
-		pte_t *pte = pgdir_walk(kern_pgdir, (void *)i, 0);
-		if (pte == NULL) {
-			e->env_pgdir[PDX(i)] = 0;
-		} else {
-			pte_t *envPte = pgdir_walk(e->env_pgdir, (void *)i, 1);
-			*envPte = *pte;
-		}
-	}
-
+	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
 	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
@@ -289,12 +280,11 @@ region_alloc(struct Env *e, void *va, size_t len)
 	void *end = ROUNDUP(va + len, PGSIZE);
 	// Map pages!
 	for (int i = 0; i < end - va; i += PGSIZE) {
-		pte_t *pte = pgdir_walk(e->env_pgdir, (void *)(va + i), 1);
-		if (pte == NULL) {
-			panic("Memory out!");
+		p = page_alloc(ALLOC_ZERO);
+		if (!p) {
+			panic("region_alloc error!");
 		}
-		p = page_alloc(0);
-		*pte = page2pa(p) | PTE_P | PTE_U | PTE_W;
+		page_insert(e->env_pgdir, p, (void *)(va + i), PTE_U | PTE_W);
 	}
 }
 
@@ -361,47 +351,28 @@ load_icode(struct Env *e, uint8_t *binary)
 	// End of program segment
 	struct Proghdr *eph = ph + elf->e_phnum;
 
+	// Change to user pagedir
+	lcr3(PADDR(e->env_pgdir));
+
 	for (; ph < eph; ph++) {
 		if (ph->p_type == ELF_PROG_LOAD) {
-			void *va = ROUNDDOWN((void *)ph->p_va, PGSIZE);
-			void *end = ROUNDUP((void *)ph->p_va + ph->p_memsz, PGSIZE);
-			unsigned int copySize = 0;
-
-			for (unsigned int i = 0; i < end - va; i += PGSIZE) {
-				// Allocate page entry
-				pte_t *envPte = pgdir_walk(e->env_pgdir, (void *)(va + i), 1);
-				// Copy into page
-				struct PageInfo *pp = page_alloc(ALLOC_ZERO);
-				uint8_t *vaddr = (uint8_t *)page2kva(pp);
-				if (i == 0) {
-					unsigned int diff = (void *)ph->p_va - va;
-					while (diff + copySize < PGSIZE && copySize < ph->p_filesz) {
-						vaddr[diff + copySize] = (binary + ph->p_offset)[copySize];
-						
-						copySize++;
-					}
-				} else {
-					unsigned int j = 0;
-					while (j < PGSIZE && copySize < ph->p_filesz) {
-						vaddr[j] = (binary + ph->p_offset)[copySize];
-						j++;
-						copySize++;
-					}
-				}
-
-				// Store in pte entry
-				*envPte = page2pa(pp) | PTE_W | PTE_U | PTE_P;
-
-			}
-
+			// Allocate memory
+			region_alloc(e, (void *)ph->p_va, ph->p_memsz);
+			// Copy memory
+			memcpy((void *)ph->p_va, (void *)(binary + ph->p_offset), (size_t)ph->p_filesz);
+			// Clear bss section
+			memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
 		}
 	}
-	// Now map one page for the program's initial stack
-	// at virtual address USTACKTOP - PGSIZE.
+
 	// Set entry point
 	(e->env_tf).tf_eip = (uintptr_t)elf->e_entry;
-	// (e->env_tf).tf_eip = (uintptr_t)(0xf0122376);
+	// Now map one page for the program's initial stack
+	// at virtual address USTACKTOP - PGSIZE.
 	region_alloc(e, (void *)(USTACKTOP - PGSIZE), PGSIZE);
+
+	// Change back to kern pgdir
+	lcr3(PADDR(kern_pgdir));
 }
 
 //
@@ -415,7 +386,9 @@ void
 env_create(uint8_t *binary, enum EnvType type)
 {
 	struct Env *e;
-	env_alloc(&e, 0);
+	if (env_alloc(&e, 0) < 0) {
+		panic("env_alloc error!");
+	}
 	load_icode(e, binary);
 	e->env_type = type;
 }

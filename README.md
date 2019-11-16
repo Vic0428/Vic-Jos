@@ -76,206 +76,219 @@ will panic with the message "env_alloc: out of memory".
 
 #### Answer
 
-Look at the book (though chapter 5 is enough)
-
-### Exercise 3
-
-#### Question
-
-*While GDB can only access QEMU's memory by virtual address, it's often useful to be able to inspect physical memory while setting up virtual memory. Review the QEMU [monitor commands](https://www.cs.hmc.edu/~rhodes/courses/cs134/sp19/labguide.html#qemu) from the lab tools guide, especially the `xp` command, which lets you inspect physical memory. To access the QEMU monitor, press Ctrl-a c in the terminal (the same binding returns to the serial console)*.
-
-*Use the xp command in the QEMU monitor and the x command in GDB to inspect memory at corresponding physical and virtual addresses and make sure you see the same data.*
-
-*Our patched version of QEMU provides an info pg command that may also prove useful: it shows a compact but detailed representation of the current page tables, including all mapped memory ranges, permissions, and flags. Stock QEMU also provides an info mem command that shows an overview of which ranges of virtual addresses are mapped and with what permissions.*
-
-#### Answer
-
-Make sure you use the **pathched QEMU**
-
-```shell
-(gdb) x/16xw 0xf0100000
-0xf0100000: 	0x1badb002      0x00000000      0xe4524ffe      0x7205c766
-0xf0100010:   0x34000004      0x6000b812      0x220f0011      0xc0200fd8
-0xf0100020:  	0x0100010d      0xc0220f80      0x10002fb8      0xbde0fff0
-0xf0100030:   0x00000000      0x116000bc      0x0002e8f0      0xfeeb0000
-
-(qemu) xp/16xw 0x00100000
-0000000000100000: 0x1badb002 0x00000000 0xe4524ffe 0x7205c766
-0000000000100010: 0x34000004 0x6000b812 0x220f0011 0xc0200fd8
-0000000000100020: 0x0100010d 0xc0220f80 0x10002fb8 0xbde0fff0
-0000000000100030: 0x00000000 0x116000bc 0x0002e8f0 0xfeeb0000
-```
-
-#### Question
-
-*Assuming that the following JOS kernel code is correct, what type should variable `x` have `uintptr_t` or `physaddr_t`?*
+`env_init()` function
 
 ```c++
-mystery_t x;
-char* value = return_a_pointer();
-*value = 10;
-x = (mystery_t) value;
-```
-
-#### Answer
-
-Because we dereference `value` , so `value` must be virtual address. 
-
-### Exercise 4
-
-#### Question
-
-*In the file `kern/pmap.c`, you must implement code for the following functions.*
-
-```c
-pgdir_walk()
-boot_map_region()
-page_lookup()
-page_remove()
-page_insert()
-```
-
-*`check_page()`, called from `mem_init()`, tests your page table management routines. You should make sure it reports success before proceeding.*
-
-#### Answer
-
-```c
-pte_t *
-pgdir_walk(pde_t *pgdir, const void *va, int create)
-{
-	if((pgdir[PDX(va)] & PTE_P) == 0) {
-		if (create == false) {
-			return NULL;
-		} else {
-			struct PageInfo* new_page = page_alloc(ALLOC_ZERO);
-			if (new_page == NULL) {
-				return NULL;
-			} else {
-				pgdir[PDX(va)] = PTE_ADDR(page2pa(new_page)) | PTE_P | PTE_W;
-				new_page -> pp_ref += 1;
-			}
-		}
-	}
-	return (pte_t *)(KADDR(PTE_ADDR(pgdir[PDX(va)]))) + PTX(va);
-}
-
-static void
-boot_map_region(pde_t *pgdir, uintptr_t va, size_t size, physaddr_t pa, int perm)
-{
-	size_t n = ROUNDUP(size, PGSIZE);
-	for (int i = 0; i < n; i += PGSIZE) {
-		pte_t *pte = pgdir_walk(pgdir, (void *)(va + i), 1);
-		if (pte == NULL) {
-			return;
-		}
-		*pte = PTE_ADDR(pa + i) | perm | PTE_P;
-	}
-
-}
-
-struct PageInfo *
-page_lookup(pde_t *pgdir, void *va, pte_t **pte_store)
-{
-	pte_t *pte = pgdir_walk(pgdir, va, 0);
-	if (pte == NULL) {
-		return NULL;
-	}
-	if ((*pte & PTE_P) == 0) {
-		return NULL;
-	} else {
-		if (pte_store) {
-			*pte_store = pte;
-		}
-		return pa2page(PTE_ADDR(*pte));
-	}
-	return NULL;
-}
-
 void
-page_remove(pde_t *pgdir, void *va)
+env_init(void)
 {
-	// Page Table Entry
-	pte_t *pte;
-	struct PageInfo* page = page_lookup(pgdir, va, &pte);
-	if (!page) {
-		return;
+	env_free_list = envs;
+	// Set up envs array
+	for (unsigned int i = 0; i < NENV - 1; i++) {
+		envs[i].env_id = 0;
+		envs[i].env_link = &envs[i+1];
 	}
-	// If already mapped
-	if ((*pte & PTE_P) == 1) {
-		// Decrease pp -> pp_ref
-		page_decref(page);
-		// Invalidate
-		tlb_invalidate(pgdir, va);
-		// Clera Page Table Entry
-		*pte = 0;
-	} 
-	return;
+	// The end of the link
+	envs[NENV - 1].env_id = 0;
+	envs[NENV - 1].env_link = NULL;
+	// Per-CPU part of the initialization
+	env_init_percpu();
 }
+```
 
-int
-page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
-{	
-	// Page Table Entry
-	pte_t *pte = pgdir_walk(pgdir, va, 1);
-	if (pte == NULL) {
+`env_setup_vm()` function
+
+```c++
+static int
+env_setup_vm(struct Env *e)
+{
+	int i;
+	struct PageInfo *p = NULL;
+
+	// Allocate a page for the page directory
+	if (!(p = page_alloc(ALLOC_ZERO)))
 		return -E_NO_MEM;
-	}
-	if ((*pte & PTE_P) == 1) {
-		if (pa2page(PTE_ADDR(*pte))!= pp) {
-			page_remove(pgdir, va);
-			pp -> pp_ref += 1;
-		}
-	} else {
-		pp -> pp_ref += 1;
-	}
-	*pte = PTE_ADDR(page2pa(pp)) | perm | PTE_P;
-	pgdir[PDX(va)] |= perm;
+
+	// Now, set e->env_pgdir and initialize the page directory.
+	//
+	// Hint:
+	//    - The VA space of all envs is identical above UTOP
+	//	(except at UVPT, which we've set below).
+	//	See inc/memlayout.h for permissions and layout.
+	//	Can you use kern_pgdir as a template?  Hint: Yes.
+	//	(Make sure you got the permissions right in Lab 2.)
+	//    - The initial VA below UTOP is empty.
+	//    - You do not need to make any more calls to page_alloc.
+	//    - Note: In general, pp_ref is not maintained for
+	//	physical pages mapped only above UTOP, but env_pgdir
+	//	is an exception -- you need to increment env_pgdir's
+	//	pp_ref for env_free to work correctly.
+	//    - The functions in kern/pmap.h are handy.
+	
+	// The VA space above UTOP is identiccal
+	e->env_pgdir = page2kva(p);
+	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
+	// UVPT maps the env's own page table read-only.
+	// Permissions: kernel R, user R
+	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
+
+	p->pp_ref += 1;
 	return 0;
 }
 
 ```
 
-### Exercise 5
+`region_alloc()`
 
-#### Question
-
-*Fill in the missing code in `mem_init()` after the call to `check_page()`.*
-
-#### Answer
-
-```c
-boot_map_region(kern_pgdir, UPAGES, PTSIZE, PADDR(pages), PTE_U)
-boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W);
-boot_map_region(kern_pgdir, KERNBASE, 1 << 28, 0, PTE_W);
+```c++
+static void
+region_alloc(struct Env *e, void *va, size_t len)
+{
+	// LAB 3: Your code here.
+	// (But only if you need it for load_icode.)
+	//
+	// Hint: It is easier to use region_alloc if the caller can pass
+	//   'va' and 'len' values that are not page-aligned.
+	//   You should round va down, and round (va + len) up.
+	//   (Watch out for corner-cases!)
+	struct PageInfo *p = NULL;
+	va = ROUNDDOWN(va, PGSIZE);
+	void *end = ROUNDUP(va + len, PGSIZE);
+	// Map pages!
+	for (int i = 0; i < end - va; i += PGSIZE) {
+		p = page_alloc(ALLOC_ZERO);
+		if (!p) {
+			panic("region_alloc error!");
+		}
+		page_insert(e->env_pgdir, p, (void *)(va + i), PTE_U | PTE_W);
+	}
+}
 ```
 
-#### Question
+`load_icode()` function
 
-*We have placed the kernel and user environment in the same address space. Why will user programs not be able to read or write the kernel's memory? What specific mechanisms protect the kernel memory?*
+```c++
+static void
+load_icode(struct Env *e, uint8_t *binary)
+{
+	// Hints:
+	//  Load each program segment into virtual memory
+	//  at the address specified in the ELF segment header.
+	//  You should only load segments with ph->p_type == ELF_PROG_LOAD.
+	//  Each segment's virtual address can be found in ph->p_va
+	//  and its size in memory can be found in ph->p_memsz.
+	//  The ph->p_filesz bytes from the ELF binary, starting at
+	//  'binary + ph->p_offset', should be copied to virtual address
+	//  ph->p_va.  Any remaining memory bytes should be cleared to zero.
+	//  (The ELF header should have ph->p_filesz <= ph->p_memsz.)
+	//  Use functions from the previous lab to allocate and map pages.
+	//
+	//  All page protection bits should be user read/write for now.
+	//  ELF segments are not necessarily page-aligned, but you can
+	//  assume for this function that no two segments will touch
+	//  the same virtual page.
+	//
+	//  You may find a function like region_alloc useful.
+	//
+	//  Loading the segments is much simpler if you can move data
+	//  directly into the virtual addresses stored in the ELF binary.
+	//  So which page directory should be in force during
+	//  this function?
+	//
+	//  You must also do something with the program's entry point,
+	//  to make sure that the environment starts executing there.
+	//  What?  (See env_run() and env_pop_tf() below.)
 
-#### Answer
+	struct Elf *elf = (struct Elf *)binary;
+	// is this a valid ELF?
+	if (elf->e_magic != ELF_MAGIC) {
+		panic("elf file error");
+	}
+	// Load each program segment
+	struct Proghdr *ph = (struct Proghdr *)(binary + elf->e_phoff);
+	// End of program segment
+	struct Proghdr *eph = ph + elf->e_phnum;
 
-Using bit `PTE_W` and `PTE_U`. 
+	// Change to user pagedir
+	lcr3(PADDR(e->env_pgdir));
 
-#### Question
+	for (; ph < eph; ph++) {
+		if (ph->p_type == ELF_PROG_LOAD) {
+			// Allocate memory
+			region_alloc(e, (void *)ph->p_va, ph->p_memsz);
+			// Copy memory
+			memcpy((void *)ph->p_va, (void *)(binary + ph->p_offset), (size_t)ph->p_filesz);
+			// Clear bss section
+			memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
+		}
+	}
 
-*What is the maximum amount of physical memory that this operating system can support? Why?*
+	// Set entry point
+	(e->env_tf).tf_eip = (uintptr_t)elf->e_entry;
+	// Now map one page for the program's initial stack
+	// at virtual address USTACKTOP - PGSIZE.
+	region_alloc(e, (void *)(USTACKTOP - PGSIZE), PGSIZE);
 
-#### Answer
+	// Change back to kern pgdir
+	lcr3(PADDR(kern_pgdir));
+}
+```
 
-Since JOS use at most 4MB `Pageinfo` to manage memory, each struct is 8B. So we can at most support 512k pages. And the total physical memory is 2GB. 
+`env_create()` function
 
-#### Question
+```c++
+void
+env_create(uint8_t *binary, enum EnvType type)
+{
+	struct Env *e;
+	if (env_alloc(&e, 0) < 0) {
+		panic("env_alloc error!");
+	}
+	load_icode(e, binary);
+	e->env_type = type;
+}
+```
 
-How much space overhead is there for managing memory, if we actually had the maximum amount of physical memory? How is this overhead broken down?
+`env_run()` function
 
-#### Answer
+```c++
+void
+env_run(struct Env *e)
+{
+	// Step 1: If this is a context switch (a new environment is running):
+	//	   1. Set the current environment (if any) back to
+	//	      ENV_RUNNABLE if it is ENV_RUNNING (think about
+	//	      what other states it can be in),
+	//	   2. Set 'curenv' to the new environment,
+	//	   3. Set its status to ENV_RUNNING,
+	//	   4. Update its 'env_runs' counter,
+	//	   5. Use lcr3() to switch to its address space.
+	// Step 2: Use env_pop_tf() to restore the environment's
+	//	   registers and drop into user mode in the
+	//	   environment.
 
-If we have 2G physical memory:
+	// Hint: This function loads the new environment's state from
+	//	e->env_tf.  Go back through the code you wrote above
+	//	and make sure you have set the relevant parts of
+	//	e->env_tf to sensible values.
 
-- 4MB for  `Pageinfo`
-- 2MB for page table
-- 4KB for page directory
+	// LAB 3: Your code here.
+	if (curenv != NULL) {
+		if (curenv->env_status == ENV_RUNNING) {
+			curenv->env_status = ENV_RUNNABLE;
+
+		}
+	}
+	curenv = e;
+	curenv->env_status = ENV_RUNNING;
+	curenv->env_runs += 1;
+
+	lcr3(PADDR(curenv->env_pgdir));
+	// We need to set e->env_tf.tf_eip! 
+	env_pop_tf(&curenv->env_tf);
+
+}
+```
 
 
 
