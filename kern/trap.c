@@ -192,9 +192,7 @@ trap_dispatch(struct Trapframe *tf)
 
 		// Break Point Handler
 		case T_BRKPT:
-		while (1) {
-			monitor(NULL);
-		}
+		monitor(tf);
 		break;
 
 		case T_SYSCALL:
