@@ -611,17 +611,29 @@ mmio_map_region(physaddr_t pa, size_t size)
 	//
 	// Hint: The staff solution uses boot_map_region.
 	//
+
 	// Compute next base address
 	uintptr_t next_base = ROUNDUP(base + size, PGSIZE);
 
 	// Round up and Round down
 	base = ROUNDDOWN(base, PGSIZE);
+
+	// The end of pa address
 	physaddr_t pa_end = ROUNDUP(pa + size, PGSIZE);
+	// The beginning of pa address
 	pa = ROUNDDOWN(pa, PGSIZE);
+	// The size of pa address
 	size = (size_t)(pa_end - pa);
 
-	// map region
+	// Handle the overflow case!
+	if (base + size > MMIOLIM || pa_end < pa) {
+		panic("mmio_map_region() error!\n");
+	}
+
+	// Map region
 	boot_map_region(kern_pgdir, base, size, pa, PTE_PCD | PTE_PWT | PTE_W);
+
+	// Update base address
 	base = next_base;
 
 	return (void *)prev_base;
