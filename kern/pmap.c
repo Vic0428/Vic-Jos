@@ -195,19 +195,6 @@ mem_init(void)
 	// LAB 3: Your code here.
 	boot_map_region(kern_pgdir, UENVS, n, PADDR(envs), PTE_U);
 
-	//////////////////////////////////////////////////////////////////////
-	// Use the physical memory that 'bootstack' refers to as the kernel
-	// stack.  The kernel stack grows down from virtual address KSTACKTOP.
-	// We consider the entire range from [KSTACKTOP-PTSIZE, KSTACKTOP)
-	// to be the kernel stack, but break this into two pieces:
-	//     * [KSTACKTOP-KSTKSIZE, KSTACKTOP) -- backed by physical memory
-	//     * [KSTACKTOP-PTSIZE, KSTACKTOP-KSTKSIZE) -- not backed; so if
-	//       the kernel overflows its stack, it will fault rather than
-	//       overwrite memory.  Known as a "guard page".
-	//     Permissions: kernel RW, user NONE
-	// Your code goes here:
-	boot_map_region(kern_pgdir, KSTACKTOP - KSTKSIZE, KSTKSIZE, PADDR(bootstack), PTE_W);
-	//////////////////////////////////////////////////////////////////////
 	// Map all of physical memory at KERNBASE.
 	// Ie.  the VA range [KERNBASE, 2^32) should map to
 	//      the PA range [0, 2^32 - KERNBASE)
@@ -266,6 +253,11 @@ mem_init_mp(void)
 	//     Permissions: kernel RW, user NONE
 	//
 	// LAB 4: Your code here:
+	for (int i = 0; i < NCPU; i++) {
+		uintptr_t kstacktop_i = KSTACKTOP - i * (KSTKSIZE + KSTKGAP);
+		boot_map_region(kern_pgdir, kstacktop_i - KSTKSIZE, KSTKSIZE, 
+						PADDR(percpu_kstacks[i]), PTE_W);
+	}
 
 }
 
@@ -872,17 +864,16 @@ check_kern_pgdir(void)
 	// check kernel stack
 	// (updated in lab 4 to check per-CPU kernel stacks)
 	for (n = 0; n < NCPU; n++) {
+		cprintf("%d\n", n);
 		uint32_t base = KSTACKTOP - (KSTKSIZE + KSTKGAP) * (n + 1);
-		for (i = 0; i < KSTKSIZE; i += PGSIZE)
+		for (i = 0; i < KSTKSIZE; i += PGSIZE) {
 			assert(check_va2pa(pgdir, base + KSTKGAP + i)
 				== PADDR(percpu_kstacks[n]) + i);
+		}
 		for (i = 0; i < KSTKGAP; i += PGSIZE)
 			assert(check_va2pa(pgdir, base + i) == ~0);
 	}
 
-	for (i = 0; i < KSTKSIZE; i += PGSIZE)
-		assert(check_va2pa(pgdir, KSTACKTOP - KSTKSIZE + i) == PADDR(bootstack) + i);
-	assert(check_va2pa(pgdir, KSTACKTOP - PTSIZE) == ~0);
 	// check PDE permissions
 	for (i = 0; i < NPDENTRIES; i++) {
 		switch (i) {
