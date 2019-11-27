@@ -156,6 +156,7 @@ trap_init_percpu(void)
 					sizeof(struct Taskstate) - 1, 0);
 	gdt[(GD_TSS0 >> 3) + i].sd_s = 0;
 
+	ltr(GD_TSS0 + (i << 3));
 	// Load the IDT
 	lidt(&idt_pd);
 }
@@ -226,7 +227,7 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 4: Your code here.
 
 	// Unexpected trap: The user process or the kernel has a bug.
-	print_trapframe(tf);
+	// print_trapframe(tf);
 	// Handle processor exceptions.
 	// Page fault
 	switch (tf->tf_trapno)
@@ -277,14 +278,14 @@ trap(struct Trapframe *tf)
 	// the interrupt path.
 	assert(!(read_eflags() & FL_IF));
 
-	cprintf("Incoming TRAP frame at %p\n", tf);
+	// cprintf("Incoming TRAP frame at %p\n", tf);
 	if ((tf->tf_cs & 3) == 3) {
 		// Trapped from user mode.
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
 		// LAB 4: Your code here.
 		assert(curenv);
-
+		lock_kernel();
 		// Garbage collect if current enviroment is a zombie
 		if (curenv->env_status == ENV_DYING) {
 			env_free(curenv);

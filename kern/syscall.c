@@ -286,6 +286,9 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 	case SYS_cgetc:
 		return sys_cgetc();
 		break;
+	case SYS_yield:
+		sys_yield();
+		break;
 	default:
 		return -E_INVAL;
 	}
