@@ -70,8 +70,46 @@ void
 trap_init(void)
 {
 	extern struct Segdesc gdt[];
-
 	// LAB 3: Your code here.
+	void divide_handler();
+	void debug_handler();
+	void nmi_handler();
+	void brkpt_handler();
+	void oflow_handler();
+	void bound_handler();
+	void device_handler();
+	void illop_handler();
+	void tss_handler();
+	void segnp_handler();
+	void stack_handler();
+	void gpflt_handler();
+	void pgflt_handler();
+	void fperr_handler();
+	void align_handler();
+	void mchk_handler();
+	void simderr_handler();
+	void syscall_handler();
+	void dblflt_handler();
+	// LAB 3: Your code here.
+    SETGATE(idt[T_DIVIDE], 0, GD_KT, divide_handler, 0);
+    SETGATE(idt[T_DEBUG], 0, GD_KT, debug_handler, 0);
+    SETGATE(idt[T_NMI], 0, GD_KT, nmi_handler, 0);
+    SETGATE(idt[T_BRKPT], 0, GD_KT, brkpt_handler, 3);
+    SETGATE(idt[T_OFLOW], 0, GD_KT, oflow_handler, 0);
+    SETGATE(idt[T_BOUND], 0, GD_KT, bound_handler, 0);
+    SETGATE(idt[T_DEVICE], 0, GD_KT, device_handler, 0);
+    SETGATE(idt[T_ILLOP], 0, GD_KT, illop_handler, 0);
+    SETGATE(idt[T_DBLFLT], 0, GD_KT, dblflt_handler, 0);
+    SETGATE(idt[T_TSS], 0, GD_KT, tss_handler, 0);
+    SETGATE(idt[T_SEGNP], 0, GD_KT, segnp_handler, 0);
+    SETGATE(idt[T_STACK], 0, GD_KT, stack_handler, 0);
+    SETGATE(idt[T_GPFLT], 0, GD_KT, gpflt_handler, 0);
+    SETGATE(idt[T_PGFLT], 0, GD_KT, pgflt_handler, 0);
+    SETGATE(idt[T_FPERR], 0, GD_KT, fperr_handler, 0);
+    SETGATE(idt[T_ALIGN], 0, GD_KT, align_handler, 0);
+    SETGATE(idt[T_MCHK], 0, GD_KT, mchk_handler, 0);
+    SETGATE(idt[T_SIMDERR], 0, GD_KT, simderr_handler, 0);
+    SETGATE(idt[T_SYSCALL], 0, GD_KT, syscall_handler, 3);
 
 	// Per-CPU setup 
 	trap_init_percpu();
@@ -175,6 +213,7 @@ print_regs(struct PushRegs *regs)
 static void
 trap_dispatch(struct Trapframe *tf)
 {
+<<<<<<< HEAD
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
 
@@ -192,12 +231,35 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 4: Your code here.
 
 	// Unexpected trap: The user process or the kernel has a bug.
+=======
+>>>>>>> lab3
 	print_trapframe(tf);
-	if (tf->tf_cs == GD_KT)
-		panic("unhandled trap in kernel");
-	else {
-		env_destroy(curenv);
-		return;
+	// Handle processor exceptions.
+	// Page fault
+	switch (tf->tf_trapno)
+	{
+		// Page Fault Handler
+		case T_PGFLT:
+		page_fault_handler(tf);
+		break;
+
+		// Break Point Handler
+		case T_BRKPT:
+		monitor(tf);
+		break;
+
+		case T_SYSCALL:
+		// Store in return value
+		tf->tf_regs.reg_eax = syscall(tf->tf_regs.reg_eax, tf->tf_regs.reg_edx, tf->tf_regs.reg_ecx, tf->tf_regs.reg_ebx, tf->tf_regs.reg_edi, tf->tf_regs.reg_esi);
+		break;	
+	default:
+		if (tf->tf_cs == GD_KT)
+			panic("unhandled trap in kernel");
+		else {
+			env_destroy(curenv);
+			return;
+		}
+		break;
 	}
 }
 
@@ -222,12 +284,17 @@ trap(struct Trapframe *tf)
 	// the interrupt path.
 	assert(!(read_eflags() & FL_IF));
 
+<<<<<<< HEAD
+=======
+	cprintf("Incoming TRAP frame at %p\n", tf);
+>>>>>>> lab3
 	if ((tf->tf_cs & 3) == 3) {
 		// Trapped from user mode.
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
 		// LAB 4: Your code here.
 		assert(curenv);
+<<<<<<< HEAD
 
 		// Garbage collect if current enviroment is a zombie
 		if (curenv->env_status == ENV_DYING) {
@@ -236,6 +303,8 @@ trap(struct Trapframe *tf)
 			sched_yield();
 		}
 
+=======
+>>>>>>> lab3
 		// Copy trap frame (which is currently on the stack)
 		// into 'curenv->env_tf', so that running the environment
 		// will restart at the trap point.
@@ -271,8 +340,12 @@ page_fault_handler(struct Trapframe *tf)
 
 	// Handle kernel-mode page faults.
 
-	// LAB 3: Your code here.
-
+	if (tf->tf_cs == GD_KT) {
+		// struct PageInfo *pp = page_alloc(ALLOC_ZERO);
+		// page_insert(kern_pgdir, pp, (void *)fault_va, PTE_W);
+		// return;
+		panic("NOOOOO!");
+	}
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.
 
