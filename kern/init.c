@@ -49,8 +49,6 @@ i386_init(void)
 	lock_kernel();
 	// Starting non-boot CPUs
 	boot_aps();
-	unlock_kernel();
-	cprintf("Finish boot aps!\n");
 // #if defined(TEST)
 // 	// Don't touch -- used by grading script!
 // 	ENV_CREATE(TEST, ENV_TYPE_USER);
@@ -58,7 +56,6 @@ i386_init(void)
 // 	// Touch all you want.
 // 	ENV_CREATE(user_primes, ENV_TYPE_USER);
 // #endif // TEST*
-	lock_kernel();
 	// Schedule and run the first user environment!
 	sched_yield();
 }
@@ -79,7 +76,6 @@ boot_aps(void)
 	// Write entry code to unused memory at MPENTRY_PADDR
 	code = KADDR(MPENTRY_PADDR);
 	memmove(code, mpentry_start, mpentry_end - mpentry_start);
-
 	// Boot each AP one at a time
 	for (c = cpus; c < cpus + ncpu; c++) {
 		if (c == cpus + cpunum())  // We've started already.

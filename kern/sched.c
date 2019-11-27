@@ -34,27 +34,17 @@ sched_yield(void)
 		// Search Runnable environment
 		for (i = 0; i < NENV; i++) {
 			if (envs[i].env_status == ENV_RUNNABLE) {
-				break;
+				env_run(&envs[i]);
 			}
-		}
-		// Find runnable environment
-		if (i != NENV) {
-			// cprintf("CPU: %d, find runnable environment %d\n", cpunum(), i);
-			env_run(&envs[i]);
 		}
 	} else {
 		for (i = id + 1; i < NENV + id; i++) {
 			if (envs[i % NENV].env_status == ENV_RUNNABLE) {
-				break;
+				env_run(&envs[i % NENV]);
 			}
 		}
-		if (i != NENV + id) {
-			// cprintf("CPU: %d, find runnable environment %d\n", cpunum(), i % NENV);
-			env_run(&envs[i % NENV]);
-		} else {
-			if (curenv->env_status == ENV_RUNNING) {
+		if (curenv->env_status == ENV_RUNNING) {
 				env_run(curenv);
-			}
 		}
 	}
 	// sched_halt never returns
