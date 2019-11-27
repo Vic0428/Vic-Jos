@@ -213,7 +213,6 @@ print_regs(struct PushRegs *regs)
 static void
 trap_dispatch(struct Trapframe *tf)
 {
-<<<<<<< HEAD
 	// Handle processor exceptions.
 	// LAB 3: Your code here.
 
@@ -231,8 +230,6 @@ trap_dispatch(struct Trapframe *tf)
 	// LAB 4: Your code here.
 
 	// Unexpected trap: The user process or the kernel has a bug.
-=======
->>>>>>> lab3
 	print_trapframe(tf);
 	// Handle processor exceptions.
 	// Page fault
@@ -284,17 +281,13 @@ trap(struct Trapframe *tf)
 	// the interrupt path.
 	assert(!(read_eflags() & FL_IF));
 
-<<<<<<< HEAD
-=======
 	cprintf("Incoming TRAP frame at %p\n", tf);
->>>>>>> lab3
 	if ((tf->tf_cs & 3) == 3) {
 		// Trapped from user mode.
 		// Acquire the big kernel lock before doing any
 		// serious kernel work.
 		// LAB 4: Your code here.
 		assert(curenv);
-<<<<<<< HEAD
 
 		// Garbage collect if current enviroment is a zombie
 		if (curenv->env_status == ENV_DYING) {
@@ -303,8 +296,6 @@ trap(struct Trapframe *tf)
 			sched_yield();
 		}
 
-=======
->>>>>>> lab3
 		// Copy trap frame (which is currently on the stack)
 		// into 'curenv->env_tf', so that running the environment
 		// will restart at the trap point.

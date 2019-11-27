@@ -253,7 +253,6 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	e->env_tf.tf_cs = GD_UT | 3;
 	// You will set e->env_tf.tf_eip later.
 
-<<<<<<< HEAD
 	// Enable interrupts while in user mode.
 	// LAB 4: Your code here.
 
@@ -264,9 +263,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	e->env_ipc_recving = 0;
 
 	// commit the allocation
-=======
 	// commit the alocation
->>>>>>> lab3
 	env_free_list = e->env_link;
 	*newenv_store = e;
 

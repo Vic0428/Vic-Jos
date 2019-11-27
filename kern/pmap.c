@@ -215,14 +215,11 @@ mem_init(void)
 	// we just set up the mapping anyway.
 	// Permissions: kernel RW, user NONE
 	// Your code goes here:
-<<<<<<< HEAD
 
 	// Initialize the SMP-related parts of the memory map
 	mem_init_mp();
 
-=======
 	boot_map_region(kern_pgdir, KERNBASE, 1 << 28, 0, PTE_W);
->>>>>>> lab3
 	// Check that the initial page directory has been set up correctly.
 	check_kern_pgdir();
 
@@ -314,10 +311,15 @@ page_init(void)
 	pages[0].pp_ref = 1;
 	// Page [PGSIZE, npages_basemem * PGSIZE] is free
 	for (i = 1; i < npages_basemem; i++) {
+		// Avoid adding the page at MPENTRY_PADDR to the free list
+		if (i == MPENTRY_PADDR / PGSIZE) {
+			continue;
+		}
 		pages[i].pp_ref = 0;
 		pages[i].pp_link = page_free_list;
 		page_free_list = &pages[i];
 	}
+
 	// Pages from [IOPHYSMEM, EXTPHYSMEM) allocated
 	for (i = npages_basemem; i < EXTPHYSMEM / PGSIZE; i++) {
 		pages[i].pp_ref = 1;
@@ -599,7 +601,7 @@ mmio_map_region(physaddr_t pa, size_t size)
 	// value will be preserved between calls to mmio_map_region
 	// (just like nextfree in boot_alloc).
 	static uintptr_t base = MMIOBASE;
-
+	uintptr_t prev_base = base;
 	// Reserve size bytes of virtual memory starting at base and
 	// map physical pages [pa,pa+size) to virtual addresses
 	// [base,base+size).  Since this is device memory and not
@@ -617,8 +619,20 @@ mmio_map_region(physaddr_t pa, size_t size)
 	//
 	// Hint: The staff solution uses boot_map_region.
 	//
-	// Your code here:
-	panic("mmio_map_region not implemented");
+	// Compute next base address
+	uintptr_t next_base = ROUNDUP(base + size, PGSIZE);
+
+	// Round up and Round down
+	base = ROUNDDOWN(base, PGSIZE);
+	physaddr_t pa_end = ROUNDUP(pa + size, PGSIZE);
+	pa = ROUNDDOWN(pa, PGSIZE);
+	size = (size_t)(pa_end - pa);
+
+	// map region
+	boot_map_region(kern_pgdir, base, size, pa, PTE_PCD | PTE_PWT | PTE_W);
+	base = next_base;
+
+	return (void *)prev_base;
 }
 
 static uintptr_t user_mem_check_addr;
@@ -856,7 +870,6 @@ check_kern_pgdir(void)
 		assert(check_va2pa(pgdir, KERNBASE + i) == i);
 
 	// check kernel stack
-<<<<<<< HEAD
 	// (updated in lab 4 to check per-CPU kernel stacks)
 	for (n = 0; n < NCPU; n++) {
 		uint32_t base = KSTACKTOP - (KSTKSIZE + KSTKGAP) * (n + 1);
@@ -867,11 +880,9 @@ check_kern_pgdir(void)
 			assert(check_va2pa(pgdir, base + i) == ~0);
 	}
 
-=======
 	for (i = 0; i < KSTKSIZE; i += PGSIZE)
 		assert(check_va2pa(pgdir, KSTACKTOP - KSTKSIZE + i) == PADDR(bootstack) + i);
 	assert(check_va2pa(pgdir, KSTACKTOP - PTSIZE) == ~0);
->>>>>>> lab3
 	// check PDE permissions
 	for (i = 0; i < NPDENTRIES; i++) {
 		switch (i) {
