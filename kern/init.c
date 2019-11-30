@@ -41,21 +41,17 @@ i386_init(void)
 	// Lab 4 multitasking initialization functions
 	pic_init();
 
-	// Create three env
-	ENV_CREATE(user_yield, ENV_TYPE_USER);
-	ENV_CREATE(user_yield, ENV_TYPE_USER);
-	ENV_CREATE(user_yield, ENV_TYPE_USER);
 	// Acquire the big kernel lock before waking up APs
 	lock_kernel();
 	// Starting non-boot CPUs
 	boot_aps();
-// #if defined(TEST)
-// 	// Don't touch -- used by grading script!
-// 	ENV_CREATE(TEST, ENV_TYPE_USER);
-// #else
-// 	// Touch all you want.
-// 	ENV_CREATE(user_primes, ENV_TYPE_USER);
-// #endif // TEST*
+#if defined(TEST)
+	// Don't touch -- used by grading script!
+	ENV_CREATE(TEST, ENV_TYPE_USER);
+#else
+	// Touch all you want.
+	ENV_CREATE(user_dumbfork, ENV_TYPE_USER);
+#endif // TEST*
 	// Schedule and run the first user environment!
 	sched_yield();
 }
