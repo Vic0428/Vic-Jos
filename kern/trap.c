@@ -368,10 +368,44 @@ page_fault_handler(struct Trapframe *tf)
 
 	// LAB 4: Your code here.
 
-	// Destroy the environment that caused the fault.
-	cprintf("[%08x] user fault va %08x ip %08x\n",
-		curenv->env_id, fault_va, tf->tf_eip);
-	print_trapframe(tf);
-	env_destroy(curenv);
+	// Destroy the environment that caused the fault if no user handler
+	if (!curenv->env_pgfault_upcall) {
+		cprintf("[%08x] user fault va %08x ip %08x\n",
+			curenv->env_id, fault_va, tf->tf_eip);
+		print_trapframe(tf);
+		env_destroy(curenv);
+	} else {
+		// Set up uFrame
+		struct UTrapframe uFrame;
+		uFrame.utf_eflags = tf->tf_eflags;
+		uFrame.utf_eip = tf->tf_eip;
+		uFrame.utf_err = tf->tf_err;
+		uFrame.utf_esp = tf->tf_esp;
+		uFrame.utf_fault_va = fault_va;
+		uFrame.utf_regs = tf->tf_regs;
+
+		// Set the next instruction
+		tf->tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+		// Check tf->tf_eip
+		user_mem_assert(curenv, (void *)tf->tf_eip, PGSIZE, PTE_U | PTE_P);
+		// Already on user exception stack
+		if (tf->tf_esp >= UXSTACKTOP - PGSIZE && tf->tf_esp <= UXSTACKTOP - 1) {
+			// Push up an empty 32-bit word
+			tf->tf_esp -= 4;
+			tf->tf_esp -= sizeof(struct UTrapframe);
+			// Error: expection stack overflow !!!
+			if (tf->tf_esp < UXSTACKTOP - PGSIZE) {
+				env_destroy(curenv);
+			}
+		} else {
+			tf->tf_esp = UXSTACKTOP - sizeof(struct UTrapframe);
+		user_mem_assert(curenv, (void *)(tf->tf_esp), sizeof(struct UTrapframe), PTE_W | PTE_U | PTE_P);
+		}
+		// Copy to exception stack
+		struct UTrapframe *ptr = (struct UTrapframe *)tf->tf_esp;
+		*ptr = uFrame;
+		// Return to user environment
+		env_run(curenv);
+	}
 }
 
