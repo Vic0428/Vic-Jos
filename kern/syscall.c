@@ -197,8 +197,6 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 		// Error case 3: bad permission
 		return -E_INVAL;
 	}
-	// LAB 4: Your code here.
-	panic("sys_page_alloc not implemented");
 }
 
 // Map the page of memory at 'srcva' in srcenvid's address space
