@@ -41,13 +41,12 @@ pgfault(struct UTrapframe *utf)
 	//   You should make three system calls.
 
 	// Allocate a new page
-	sys_page_alloc(0, PFTEMP, PTE_P | PTE_U | PTE_W | PTE_COW);
+	sys_page_alloc(0, PFTEMP, PTE_P | PTE_U | PTE_W);
 	// Copy from the old page to the new page
 	memcpy(PFTEMP, ROUNDDOWN(addr, PGSIZE), PGSIZE);
-	// Unmap old page
-	sys_page_unmap(0, ROUNDDOWN(addr, PGSIZE));
 	// map new page
-	sys_page_map(0, PFTEMP, 0, ROUNDDOWN(addr, PGSIZE), PTE_P | PTE_U | PTE_W | PTE_COW);
+	sys_page_map(0, PFTEMP, 0, ROUNDDOWN(addr, PGSIZE), PTE_P | PTE_U | PTE_W);
+	sys_page_unmap(0, PFTEMP);
 
 }
 
@@ -68,11 +67,16 @@ duppage(envid_t envid, unsigned pn)
 	int r;
 	extern volatile pte_t uvpt[];
 	int perm = 0;
-	if ((uvpt[pn] & PTE_W) | (uvpt[pn] & PTE_COW)) {
+	if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW)) {
 		perm |= PTE_COW;
 	}
 	perm |= PTE_U | PTE_P;
+	// Map to children address space
 	if ((r = sys_page_map(0, (void*)(pn*PGSIZE), envid, (void*)(pn*PGSIZE), perm)) < 0) {
+		panic("sys_page_map: %e", r);
+	}
+	// Map to parents address space
+	if ((r = sys_page_map(0, (void*)(pn*PGSIZE), 0, (void*)(pn*PGSIZE), perm)) < 0) {
 		panic("sys_page_map: %e", r);
 	}
 	return 0;
@@ -103,6 +107,7 @@ fork(void)
 	uint8_t *addr;
 	extern unsigned char end[];
 	int r;
+
 	// Allocate a new child environment
 	envid = sys_exofork();
 	if (envid < 0) {
@@ -113,22 +118,23 @@ fork(void)
 		thisenv = &envs[ENVX(sys_getenvid())];
 		return 0;
 	}
+
+	// Copy page mapping
 	for (addr = (uint8_t*) UTEXT; addr < end; addr += PGSIZE) {
 		duppage(envid, PGNUM(addr));
 	}
-	// Allocate new page for stack
-	sys_page_alloc(envid, (void *)(USTACKTOP-PGSIZE), PTE_P|PTE_U|PTE_W);
-	sys_page_map(envid, (void *)(USTACKTOP-PGSIZE), 0, UTEMP, PTE_P | PTE_U | PTE_W);
-	memmove(UTEMP, (void *)(USTACKTOP-PGSIZE), PGSIZE);
-	sys_page_unmap(0, UTEMP);
 
-	// duppage(envid, PGNUM(USTACKTOP-PGSIZE));
+	// Map new page for stack
+	duppage(envid, PGNUM(USTACKTOP-PGSIZE));
+
 	// Allocate new page for and entry point for children
-	thisenv = &envs[ENVX(envid)];
-	sys_page_alloc(thisenv->env_id, (void*)UXSTACKTOP - PGSIZE, PTE_U | PTE_W | PTE_P);
+	if ((r = sys_page_alloc(envid, (void*)UXSTACKTOP - PGSIZE, PTE_U | PTE_W | PTE_P)) < 0) {
+		panic("sys_page_alloc: %e", r);
+	}
 	extern void _pgfault_upcall(void);
-	sys_env_set_pgfault_upcall(thisenv->env_id, &_pgfault_upcall);
-	thisenv = &envs[ENVX(sys_getenvid())];
+	if ((r = sys_env_set_pgfault_upcall(envid, &_pgfault_upcall)) < 0) {
+		panic("sys_env_set_pgfault_upcall: %e", r);
+	}
 
 	// We're the parent
 	// Start the child environment running

@@ -375,7 +375,8 @@ page_fault_handler(struct Trapframe *tf)
 		print_trapframe(tf);
 		env_destroy(curenv);
 	} else {
-		// Set up uFrame
+
+		// Set up uFrame on kernel stack
 		struct UTrapframe uFrame;
 		uFrame.utf_eflags = tf->tf_eflags;
 		uFrame.utf_eip = tf->tf_eip;
@@ -386,8 +387,10 @@ page_fault_handler(struct Trapframe *tf)
 
 		// Set the next instruction
 		tf->tf_eip = (uintptr_t)curenv->env_pgfault_upcall;
+
 		// Check tf->tf_eip
 		user_mem_assert(curenv, (void *)tf->tf_eip, PGSIZE, PTE_U | PTE_P);
+
 		// Already on user exception stack
 		if (tf->tf_esp >= UXSTACKTOP - PGSIZE && tf->tf_esp <= UXSTACKTOP - 1) {
 			// Push up an empty 32-bit word
@@ -399,11 +402,15 @@ page_fault_handler(struct Trapframe *tf)
 			}
 		} else {
 			tf->tf_esp = UXSTACKTOP - sizeof(struct UTrapframe);
-		user_mem_assert(curenv, (void *)(tf->tf_esp), sizeof(struct UTrapframe), PTE_W | PTE_U | PTE_P);
 		}
-		// Copy to exception stack
+
+		// Check tf-tf_esp
+		user_mem_assert(curenv, (void *)(tf->tf_esp), sizeof(struct UTrapframe), PTE_W | PTE_U | PTE_P);
+
+		// Copy UTrapfram from kernel stack to user exception stack
 		struct UTrapframe *ptr = (struct UTrapframe *)tf->tf_esp;
 		*ptr = uFrame;
+
 		// Return to user environment
 		env_run(curenv);
 	}

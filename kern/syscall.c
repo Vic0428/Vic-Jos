@@ -122,7 +122,7 @@ sys_env_set_status(envid_t envid, int status)
 		return -E_BAD_ENV;
 	}
 	// Error case 2: the status is not valid
-	if (status < ENV_FREE || status > ENV_NOT_RUNNABLE) {
+	if (status != ENV_RUNNABLE && status != ENV_NOT_RUNNABLE) {
 		return -E_INVAL;
 	}
 	// Change the status
@@ -192,7 +192,11 @@ sys_page_alloc(envid_t envid, void *va, int perm)
 			return -E_NO_MEM;
 		}
 		// Return page insert result
-		return page_insert(e->env_pgdir, pp, va, perm);
+		if (page_insert(e->env_pgdir, pp, va, perm) < 0) {
+			page_free(pp);
+			return -E_NO_MEM;
+		}
+		return 0;
 	} else {
 		// Error case 3: bad permission
 		return -E_INVAL;
