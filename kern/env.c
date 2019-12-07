@@ -544,7 +544,6 @@ env_run(struct Env *e)
 	curenv->env_runs += 1;
 	lcr3(PADDR(curenv->env_pgdir));
 	unlock_kernel();
-
 	// We need to set e->env_tf.tf_eip! 
 	env_pop_tf(&curenv->env_tf);
 

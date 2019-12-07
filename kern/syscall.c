@@ -326,8 +326,51 @@ sys_page_unmap(envid_t envid, void *va)
 static int
 sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 {
-	// LAB 4: Your code here.
-	panic("sys_ipc_try_send not implemented");
+	struct Env* e;
+	// Envid doesn't currently exist
+	if (envid2env(envid, &e, 0) < 0) {
+		return -E_BAD_ENV;
+	}
+	// The target not blocked for waiting for IPC
+	if (!e->env_ipc_recving ){
+		return -E_IPC_NOT_RECV;
+	}
+	// srcva is not page-aligned
+	if ((uint32_t)srcva < UTOP && PGOFF(srcva)) {
+		return -E_INVAL;
+	}
+	// permission error!
+	if ((uint32_t)srcva < UTOP) {
+		if (!(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_SYSCALL)) {
+			return -E_INVAL;
+		}
+	}
+	// srcva < UTOP but not mapped
+	if ((uint32_t)srcva < UTOP && (uint32_t)e->env_ipc_dstva < UTOP) {
+		struct PageInfo *pp;
+		pte_t* pte;
+		pp = page_lookup(curenv->env_pgdir, srcva, &pte);
+		if (pp == NULL) {
+			return -E_INVAL;
+		}
+		// if (perm & PTE_W), but srcva is read-only 
+		if (!(*pte & PTE_W) && (perm & PTE_W)) {
+			return -E_INVAL;
+		}
+		// Map page!
+		if (page_insert(e->env_pgdir, pp, e->env_ipc_dstva, perm) < 0) {
+			return -E_NO_MEM;
+		}
+	}
+	// Succeed!
+	e->env_ipc_recving = 0;
+	e->env_ipc_from = curenv->env_id;
+	e->env_ipc_value = value;
+	e->env_ipc_perm = (uint32_t)srcva < UTOP? perm: 0;
+	e->env_status = ENV_RUNNABLE;
+
+	return 0;
+
 }
 
 // Block until a value is ready.  Record that you want to receive
@@ -344,9 +387,19 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 static int
 sys_ipc_recv(void *dstva)
 {
-	// LAB 4: Your code here.
-	panic("sys_ipc_recv not implemented");
-	return 0;
+	// dstva < UTOP but dstva is not page-aligned
+	if ((uint32_t)dstva < UTOP && PGOFF(dstva)) {
+		return -E_INVAL;
+	}
+	// Record info
+	curenv->env_ipc_recving = 1;
+	curenv->env_ipc_dstva = dstva;
+
+	// Mask current environment not runnable
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	curenv->env_tf.tf_regs.reg_eax = 0;
+	// Giveup the CPU
+	sched_yield();
 }
 
 // Dispatches to the correct kernel function, passing the arguments.
@@ -382,6 +435,10 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_page_unmap((envid_t)a1, (void *)a2);
 	case SYS_env_set_pgfault_upcall:
 		return sys_env_set_pgfault_upcall((envid_t)a1, (void *)a2);
+	case SYS_ipc_recv:
+		return sys_ipc_recv((void *)a1);
+	case SYS_ipc_try_send:
+		return sys_ipc_try_send((envid_t)a1, (uint32_t)a2, (void *)a3, (unsigned int)a4);
 	default:
 		return -E_INVAL;
 	}
