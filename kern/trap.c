@@ -90,6 +90,22 @@ trap_init(void)
 	void simderr_handler();
 	void syscall_handler();
 	void dblflt_handler();
+	void irq0_handler();
+	void irq1_handler();
+	void irq2_handler();
+	void irq3_handler();
+	void irq4_handler();
+	void irq5_handler();
+	void irq6_handler();
+	void irq7_handler();
+	void irq8_handler();
+	void irq9_handler();
+	void irq10_handler();
+	void irq11_handler();
+	void irq12_handler();
+	void irq13_handler();
+	void irq14_handler();
+	void irq15_handler();
 	// LAB 3: Your code here.
     SETGATE(idt[T_DIVIDE], 0, GD_KT, divide_handler, 0);
     SETGATE(idt[T_DEBUG], 0, GD_KT, debug_handler, 0);
@@ -109,6 +125,22 @@ trap_init(void)
     SETGATE(idt[T_ALIGN], 0, GD_KT, align_handler, 0);
     SETGATE(idt[T_MCHK], 0, GD_KT, mchk_handler, 0);
     SETGATE(idt[T_SIMDERR], 0, GD_KT, simderr_handler, 0);
+	SETGATE(idt[IRQ_OFFSET], 0, GD_KT, irq0_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 1], 0, GD_KT, irq1_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 2], 0, GD_KT, irq2_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 3], 0, GD_KT, irq3_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 4], 0, GD_KT, irq4_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 5], 0, GD_KT, irq5_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 6], 0, GD_KT, irq6_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 7], 0, GD_KT, irq7_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 8], 0, GD_KT, irq8_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 9], 0, GD_KT, irq9_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 10], 0, GD_KT, irq10_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 11], 0, GD_KT, irq11_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 12], 0, GD_KT, irq12_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 13], 0, GD_KT, irq13_handler, 0);
+    SETGATE(idt[IRQ_OFFSET + 14], 0, GD_KT, irq14_handler, 0);
+	SETGATE(idt[IRQ_OFFSET + 15], 0, GD_KT, irq15_handler, 0);
     SETGATE(idt[T_SYSCALL], 0, GD_KT, syscall_handler, 3);
 
 	// Per-CPU setup 
