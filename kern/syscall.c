@@ -368,6 +368,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 	e->env_ipc_value = value;
 	e->env_ipc_perm = (uint32_t)srcva < UTOP? perm: 0;
 	e->env_status = ENV_RUNNABLE;
+	e->env_tf.tf_regs.reg_eax = 0;
 
 	return 0;
 
@@ -397,7 +398,6 @@ sys_ipc_recv(void *dstva)
 
 	// Mask current environment not runnable
 	curenv->env_status = ENV_NOT_RUNNABLE;
-	curenv->env_tf.tf_regs.reg_eax = 0;
 	// Giveup the CPU
 	sched_yield();
 }
