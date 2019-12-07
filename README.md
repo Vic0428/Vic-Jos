@@ -701,5 +701,156 @@ fork(void)
 }
 ```
 
+### Exercise 13
+
+#### Question
+
+*Modify `kern/trapentry.S` and `kern/trap.c` to initialize the appropriate entries in the IDT and provide handlers for IRQs 0 through 15. Then modify the code in `env_alloc()` in `kern/env.c` to ensure that user environments are always run with interrupts enabled.*
+
+#### Answer
+
+In `env_alloc()` function
+
+```
+e->env_tf.tf_eflags = FL_IF;
+```
+
+### Exercise 14
+
+#### Question
+
+*Modify the kernel's `trap_dispatch()` function so that it calls `sched_yield()` to find and run a different environment whenever a clock interrupt takes place.*
+
+#### Answer
+
+In `trap_dispatch()` function
+
+```c++
+case IRQ_TIMER + IRQ_OFFSET:
+    lapic_eoi();
+    sched_yield();
+```
+
+### Exercise 15
+
+#### Question
+
+*Implement `sys_ipc_recv` and `sys_ipc_try_send` in `kern/syscall.c`. Read the comments on both before implementing them, since they have to work together. When you call `envid2env` in these routines, you should set the `checkperm` flag to 0, meaning that any environment is allowed to send IPC messages to any other environment, and the kernel does no special permission checking other than verifying that the target envid is valid.*
+
+#### Answer
+
+```c++
+static int
+sys_ipc_recv(void *dstva)
+{
+	// dstva < UTOP but dstva is not page-aligned
+	if ((uint32_t)dstva < UTOP && PGOFF(dstva)) {
+		return -E_INVAL;
+	}
+	// Record info
+	curenv->env_ipc_recving = 1;
+	curenv->env_ipc_dstva = dstva;
+
+	// Mask current environment not runnable
+	curenv->env_status = ENV_NOT_RUNNABLE;
+	// Giveup the CPU
+	sched_yield();
+}
+```
+
+```c++
+static int
+sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
+{
+	struct Env* e;
+	// Envid doesn't currently exist
+	if (envid2env(envid, &e, 0) < 0) {
+		return -E_BAD_ENV;
+	}
+	// The target not blocked for waiting for IPC
+	if (!e->env_ipc_recving ){
+		return -E_IPC_NOT_RECV;
+	}
+	// srcva is not page-aligned
+	if ((uint32_t)srcva < UTOP && PGOFF(srcva)) {
+		return -E_INVAL;
+	}
+	// permission error!
+	if ((uint32_t)srcva < UTOP) {
+		if (!(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_SYSCALL)) {
+			return -E_INVAL;
+		}
+	}
+	// srcva < UTOP but not mapped
+	if ((uint32_t)srcva < UTOP && (uint32_t)e->env_ipc_dstva < UTOP) {
+		struct PageInfo *pp;
+		pte_t* pte;
+		pp = page_lookup(curenv->env_pgdir, srcva, &pte);
+		if (pp == NULL) {
+			return -E_INVAL;
+		}
+		// if (perm & PTE_W), but srcva is read-only 
+		if (!(*pte & PTE_W) && (perm & PTE_W)) {
+			return -E_INVAL;
+		}
+		// Map page!
+		if (page_insert(e->env_pgdir, pp, e->env_ipc_dstva, perm) < 0) {
+			return -E_NO_MEM;
+		}
+	}
+	// Succeed!
+	e->env_ipc_recving = 0;
+	e->env_ipc_from = curenv->env_id;
+	e->env_ipc_value = value;
+	e->env_ipc_perm = (uint32_t)srcva < UTOP? perm: 0;
+	e->env_status = ENV_RUNNABLE;
+	e->env_tf.tf_regs.reg_eax = 0;
+
+	return 0;
+
+}
+```
+
+
+
+```c++
+void
+ipc_send(envid_t to_env, uint32_t val, void *pg, int perm)
+{
+	// pg == null => mark pg as UTOP
+	pg = pg? pg: (void *)UTOP;
+	while (1) {
+		int ret = sys_ipc_try_send(to_env, val, pg, perm);
+		if (ret == 0) {
+			break;
+		}
+		if (ret < 0 && ret != -E_IPC_NOT_RECV) {
+			panic("ipc_send() error!");
+		}
+		sys_yield();
+	}
+}
+```
+
+```c++
+int32_t
+ipc_recv(envid_t *from_env_store, void *pg, int *perm_store)
+{
+	pg = pg? pg: (void *)UTOP;
+	int ret = sys_ipc_recv(pg);
+	if (from_env_store) {
+		*from_env_store = ret < 0? 0: thisenv->env_ipc_from;
+	}
+	if (perm_store) {
+		*perm_store = ret < 0? 0: thisenv->env_ipc_perm;
+	}
+	return ret < 0? ret: thisenv->env_ipc_value;
+}
+```
+
+
+
+
+
 
 
