@@ -217,5 +217,89 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 
 ### Exercise 5
 
+#### Question
 
+*Implement `serve_read` in `fs/serv.c`.*
+
+#### Answer
+
+`serve_read()`
+
+```c++
+int
+serve_read(envid_t envid, union Fsipc *ipc)
+{
+	struct Fsreq_read *req = &ipc->read;
+	struct Fsret_read *ret = &ipc->readRet;
+	struct OpenFile *o;
+	int r;
+	// Look up open files
+	if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0) {
+		return r;
+	}
+	if (debug)
+		cprintf("serve_read %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
+	// Read bytes into buffer
+	r = file_read(o->o_file, (void *)ret->ret_buf, req->req_n, o->o_fd->fd_offset);
+	if (r < 0) {
+		return r;
+	} else {
+		o->o_fd->fd_offset += r;
+	}
+	return r;
+}
+```
+
+### Exercise 6
+
+#### Question
+
+*Implement `serve_write` in `fs/serv.c` and `devfile_write` in `lib/file.c`.*
+
+#### Answer
+
+`devfile_write()`
+
+```c++
+static ssize_t
+devfile_write(struct Fd *fd, const void *buf, size_t n)
+{
+	// Make an FSREQ_WRITE request to the file system server.  Be
+	// careful: fsipcbuf.write.req_buf is only so large, but
+	// remember that write is always allowed to write *fewer*
+	// bytes than requested.
+	int r;
+	fsipcbuf.write.req_fileid = fd->fd_file.id;
+	fsipcbuf.write.req_n = n;
+	memmove(fsipcbuf.write.req_buf, buf, n);
+	return fsipc(FSREQ_WRITE, NULL);
+}
+```
+
+`serve_write()`
+
+```c++
+int
+serve_write(envid_t envid, struct Fsreq_write *req)
+{
+	if (debug)
+		cprintf("serve_write %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
+	struct OpenFile *o;
+	int r;
+	// Look up open files
+	if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0) {
+		return r;
+	}
+	// Extend files if necessary
+	if (o->o_fd->fd_offset + req->req_n > o->o_file->f_size) {
+		file_set_size(o->o_file, o->o_fd->fd_offset + req->req_n);
+	}
+	// Write to corresponding file
+	r = file_write(o->o_file, req->req_buf, req->req_n, o->o_fd->fd_offset);
+	if (r >= 0) {
+		o->o_fd->fd_offset += r;
+	}
+	return r;
+}
+```
 

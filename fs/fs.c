@@ -162,7 +162,7 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 		}
 		filebno -= NDIRECT;
 		// Allocate a block to corresponding entry
-		uint32_t *addr = (uint32_t *)f->f_indirect;
+		uint32_t *addr = diskaddr(f->f_indirect);
 		*ppdiskbno = &addr[filebno];
 	}
 	return 0;
