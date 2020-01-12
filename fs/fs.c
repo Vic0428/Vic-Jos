@@ -104,7 +104,6 @@ fs_init(void)
 	else
 		ide_set_disk(0);
 	bc_init();
-
 	// Set "super" to point to the super block.
 	super = diskaddr(1);
 	check_super();
