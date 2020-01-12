@@ -30,7 +30,6 @@ umain(int argc, char **argv)
 	sys_page_alloc(thisenv->env_id, TEMP_ADDR, PTE_P | PTE_W | PTE_U);
 	memcpy(TEMP_ADDR, str1, strlen(str1) + 1);
 	ipc_send(who, 0, TEMP_ADDR, PTE_P | PTE_W | PTE_U);
-
 	ipc_recv(&who, TEMP_ADDR, 0);
 	cprintf("%x got message: %s\n", who, TEMP_ADDR);
 	if (strncmp(TEMP_ADDR, str2, strlen(str2)) == 0)
