@@ -303,3 +303,107 @@ serve_write(envid_t envid, struct Fsreq_write *req)
 }
 ```
 
+### Exercise 7
+
+#### Question
+
+*`spawn` relies on the new syscall `sys_env_set_trapframe` to initialize the state of the newly created environment. Implement `sys_env_set_trapframe` in `kern/syscall.c` (don't forget to dispatch the new system call in `syscall()`.*
+
+#### Answer
+
+`sys_env_set_trapframe()`
+
+```c++
+static int
+sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
+{
+	// LAB 5: Your code here.
+	// Remember to check whether the user has supplied us with a good
+	// address!
+	struct Env *e;
+	if (envid2env(envid, &e, 1) < 0) {
+		return -E_BAD_ENV;
+	}
+	// Bad address
+	if (!tf) {
+		panic("Bad address!\n");
+	}
+	e->env_tf = *tf;
+	// Set IOPL of 0
+	e->env_tf.tf_eflags |= FL_IOPL_0;
+	// Enable interrupts
+	// CPL 3
+	return 0;
+}
+```
+
+### Exercise 8
+
+#### Question
+
+*Change `duppage` in `lib/fork.c` to follow the new convention. If the page table entry has the `PTE_SHARE` bit set, just copy the mapping directly. (You should use `PTE_SYSCALL`, not `0xfff`, to mask out the relevant bits from the page table entry. `0xfff` picks up the accessed and dirty bits as well.)*
+
+*Likewise, implement `copy_shared_pages` in `lib/spawn.c`. It should loop through all page table entries in the current process (just like `fork` did), copying any page mappings that have the `PTE_SHARE` bit set into the child process.*
+
+#### Answer
+
+`duppage()`
+
+```c++
+static int
+duppage(envid_t envid, unsigned pn)
+{
+	int r;
+	extern volatile pte_t uvpt[];
+	int perm = 0;
+
+	// If has PTE_SHARE bit set
+	if (uvpt[pn] & PTE_SHARE) {
+		perm = uvpt[pn] & PTE_SYSCALL;
+		// Map to children address space
+		if ((r = sys_page_map(0, (void*)(pn*PGSIZE), envid, (void*)(pn*PGSIZE), perm)) < 0) {
+			panic("sys_page_map: %e", r);
+		}
+		return 0;
+	}
+	else {
+		if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW)) {
+			perm |= PTE_COW;
+		}
+		perm |= PTE_U | PTE_P;
+	}
+
+	// Map to children address space
+	if ((r = sys_page_map(0, (void*)(pn*PGSIZE), envid, (void*)(pn*PGSIZE), perm)) < 0) {
+		panic("sys_page_map: %e", r);
+	}
+	// Map to parents address space
+	if ((r = sys_page_map(0, (void*)(pn*PGSIZE), 0, (void*)(pn*PGSIZE), perm)) < 0) {
+		panic("sys_page_map: %e", r);
+	}
+	return 0;
+}
+```
+
+`copy_shared_pages()`
+
+```c++
+static int
+copy_shared_pages(envid_t child)
+{
+	int r;
+	for (size_t pn = PGNUM(UTEXT); pn < PGNUM(USTACKTOP); pn++) {
+		if ((uvpd[pn >> 10] & PTE_P) && (uvpt[pn] & PTE_P)) {
+			if (uvpt[pn] & PTE_SHARE) {
+				// Map shared pages
+				if ((r = sys_page_map(0, (void*)(pn*PGSIZE), child, (void*)(pn*PGSIZE), uvpt[pn] & PTE_SYSCALL)) < 0) {
+					panic("sys_page_map error!\n");
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+```
+

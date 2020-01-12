@@ -67,10 +67,23 @@ duppage(envid_t envid, unsigned pn)
 	int r;
 	extern volatile pte_t uvpt[];
 	int perm = 0;
-	if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW)) {
-		perm |= PTE_COW;
+
+	// If has PTE_SHARE bit set
+	if (uvpt[pn] & PTE_SHARE) {
+		perm = uvpt[pn] & PTE_SYSCALL;
+		// Map to children address space
+		if ((r = sys_page_map(0, (void*)(pn*PGSIZE), envid, (void*)(pn*PGSIZE), perm)) < 0) {
+			panic("sys_page_map: %e", r);
+		}
+		return 0;
 	}
-	perm |= PTE_U | PTE_P;
+	else {
+		if ((uvpt[pn] & PTE_W) || (uvpt[pn] & PTE_COW)) {
+			perm |= PTE_COW;
+		}
+		perm |= PTE_U | PTE_P;
+	}
+
 	// Map to children address space
 	if ((r = sys_page_map(0, (void*)(pn*PGSIZE), envid, (void*)(pn*PGSIZE), perm)) < 0) {
 		panic("sys_page_map: %e", r);
@@ -120,12 +133,13 @@ fork(void)
 	}
 
 	// Copy page mapping
-	for (addr = (uint8_t*) UTEXT; addr < end; addr += PGSIZE) {
-		duppage(envid, PGNUM(addr));
+	for (addr = (uint8_t*) UTEXT; addr < (uint8_t *)(USTACKTOP); addr += PGSIZE) {
+		if ((uvpd[PGNUM(addr) >> 10] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_P)) {
+			duppage(envid, PGNUM(addr));
+			cprintf("%x\n", addr);
+		}
 	}
 
-	// Map new page for stack
-	duppage(envid, PGNUM(USTACKTOP-PGSIZE));
 
 	// Allocate new page for and entry point for children
 	if ((r = sys_page_alloc(envid, (void*)UXSTACKTOP - PGSIZE, PTE_U | PTE_W | PTE_P)) < 0) {
