@@ -121,7 +121,7 @@ serve_open(envid_t envid, struct Fsreq_open *req,
 		if (debug)
 			cprintf("openfile_alloc failed: %e", r);
 		return r;
-	}
+	};
 	fileid = r;
 
 	// Open the file
@@ -209,12 +209,22 @@ serve_read(envid_t envid, union Fsipc *ipc)
 {
 	struct Fsreq_read *req = &ipc->read;
 	struct Fsret_read *ret = &ipc->readRet;
-
+	struct OpenFile *o;
+	int r;
+	// Look up open files
+	if ((r = openfile_lookup(envid, req->req_fileid, &o)) < 0) {
+		return r;
+	}
 	if (debug)
 		cprintf("serve_read %08x %08x %08x\n", envid, req->req_fileid, req->req_n);
-
-	// Lab 5: Your code here:
-	return 0;
+	// Read bytes into buffer
+	r = file_read(o->o_file, (void *)ret->ret_buf, req->req_n, o->o_fd->fd_offset);
+	if (r < 0) {
+		return r;
+	} else {
+		o->o_fd->fd_offset += r;
+	}
+	return r;
 }
 
 
