@@ -136,7 +136,6 @@ fork(void)
 	for (addr = (uint8_t*) UTEXT; addr < (uint8_t *)(USTACKTOP); addr += PGSIZE) {
 		if ((uvpd[PGNUM(addr) >> 10] & PTE_P) && (uvpt[PGNUM(addr)] & PTE_P)) {
 			duppage(envid, PGNUM(addr));
-			cprintf("%x\n", addr);
 		}
 	}
 

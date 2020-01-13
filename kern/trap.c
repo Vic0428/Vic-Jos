@@ -269,6 +269,12 @@ trap_dispatch(struct Trapframe *tf)
 	// Page fault
 	switch (tf->tf_trapno)
 	{
+		case IRQ_OFFSET + IRQ_KBD:
+			kbd_intr();
+			break;
+		case IRQ_OFFSET + IRQ_SERIAL:
+			serial_intr();
+			break;
 		// Page Fault Handler
 		case T_PGFLT:
 		page_fault_handler(tf);
@@ -287,6 +293,7 @@ trap_dispatch(struct Trapframe *tf)
 		if (tf->tf_cs == GD_KT)
 			panic("unhandled trap in kernel");
 		else {
+			print_trapframe(tf);
 			env_destroy(curenv);
 			return;
 		}

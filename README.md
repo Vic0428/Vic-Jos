@@ -28,12 +28,14 @@ env_create(uint8_t *binary, enum EnvType type)
 	if (env_alloc(&e, 0) < 0) {
 		panic("env_alloc error!");
 	}
-	load_icode(e, binary);
-	e->env_type = type;
 	if (type == ENV_TYPE_FS) {
 		e->env_tf.tf_eflags |= FL_IOPL_3;
 	}
+	// Enable interrupts
+	load_icode(e, binary);
+	e->env_type = type;
 }
+
 ```
 
 ### Exercise 2
@@ -72,11 +74,11 @@ bc_pgfault(struct UTrapframe *utf)
 	// Round the addr
 	addr = ROUNDDOWN(addr, PGSIZE);
 	// Allocate a page
-	if ((r = sys_page_alloc(0, addr, PTE_SYSCALL) < 0)) {
+	if ((r = sys_page_alloc(0, addr, PTE_P | PTE_W | PTE_U) < 0)) {
 		panic("sys_page_alloc error!\n");
 	};
 	// Read from disk
-	if ((r = ide_read(blockno * 8, addr, 8)) < 0) {
+	if ((r = ide_read(blockno * BLKSECTS, addr, BLKSECTS)) < 0) {
 		panic("ide_read error!\n");
 	}
 
@@ -108,13 +110,15 @@ flush_block(void *addr)
 	if (!va_is_mapped(addr) || !va_is_dirty(addr)) {
 		return;
 	}
-	// write to blockno
-	if ((r = ide_write(blockno * 8, addr, 8)) < 0) {
-		panic("ide_write error!");
-	};
-	// Clear PTE_D bit
-	if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
-		panic("in bc_pgfault, sys_page_map: %e", r);
+	if (va_is_mapped(addr) && va_is_dirty(addr)) {
+		// write to blockno
+		if ((r = ide_write(blockno * BLKSECTS, addr, BLKSECTS)) < 0) {
+			panic("ide_write error!");
+		};
+		// Clear PTE_D bit
+		if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
+			panic("in bc_pgfault, sys_page_map: %e", r);
+	}
 }
 ```
 
@@ -139,7 +143,7 @@ alloc_block(void)
 	// LAB 5: Your code here.
 	for (uint32_t blockno = 1; blockno < super->s_nblocks; blockno++) {
 		// Find free block
-		if (bitmap[blockno/32] & (1 << (blockno%32))) {
+		if (block_is_free(blockno)) {
 			// Mark it as used
 			bitmap[blockno/32] &= ~(1 << (blockno%32));
 			// Flush the block
@@ -193,6 +197,10 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 	if (filebno >= NDIRECT + NINDIRECT) {
 		return -E_INVAL;
 	}
+  // Check invalid pointer
+	if (!ppdiskbno) {
+		return 0;
+	}
 	if (filebno < NDIRECT) {
 		*ppdiskbno = &f->f_direct[filebno];
 	} else {
@@ -205,8 +213,11 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 					return -E_NO_DISK;
 				}
 			}
+    	memset(diskaddr(f->f_indirect), 0, BLKSIZE);
+			flush_block(diskaddr(f->f_indirect));
 		}
 		filebno -= NDIRECT;
+
 		// Allocate a block to corresponding entry
 		uint32_t *addr = (uint32_t *)f->f_indirect;
 		*ppdiskbno = &addr[filebno];
@@ -405,5 +416,57 @@ copy_shared_pages(envid_t child)
 	return 0;
 }
 
+```
+
+### Exercise 9
+
+#### Question
+
+*In your `kern/trap.c`, call `kbd_intr` to handle trap `IRQ_OFFSET+IRQ_KBD` and `serial_intr` to handle trap `IRQ_OFFSET+IRQ_SERIAL`.*
+
+#### Answer
+
+```c++
+case IRQ_OFFSET + IRQ_KBD:
+	kbd_intr();
+	break;
+case IRQ_OFFSET + IRQ_SERIAL:
+	serial_intr();
+	break;
+```
+
+### Exercise 10
+
+#### Question
+
+*The shell doesn't support I/O redirection. It would be nice to run sh <script instead of having to type in all the commands in the script by hand, as you did above. Add I/O redirection for < to `user/sh.c`.*
+
+#### Answer
+
+```c++
+case '<':	// Input redirection
+  // Grab the filename from the argument list
+  if (gettoken(0, &t) != 'w') {
+    cprintf("syntax error: < not followed by word\n");
+    exit();
+  }
+  // Open 't' for reading as file descriptor 0
+  // (which environments use as standard input).
+  // We can't open a file onto a particular descriptor,
+  // so open the file as 'fd',
+  // then check whether 'fd' is 0.
+  // If not, dup 'fd' onto file descriptor 0,
+  // then close the original 'fd'.
+
+  // LAB 5: Your code here.
+  if ((fd = open(t, O_RDONLY)) < 0) {
+    cprintf("open %s for read: %e", t, fd);
+    exit();
+  }
+  if (fd != 0) {
+    dup(fd, 0);
+    close(fd);
+  }
+  break;
 ```
 

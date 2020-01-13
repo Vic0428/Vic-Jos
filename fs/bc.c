@@ -51,11 +51,11 @@ bc_pgfault(struct UTrapframe *utf)
 	// Round the addr
 	addr = ROUNDDOWN(addr, PGSIZE);
 	// Allocate a page
-	if ((r = sys_page_alloc(0, addr, PTE_SYSCALL) < 0)) {
+	if ((r = sys_page_alloc(0, addr, PTE_P | PTE_W | PTE_U) < 0)) {
 		panic("sys_page_alloc error!\n");
 	};
 	// Read from disk
-	if ((r = ide_read(blockno * 8, addr, 8)) < 0) {
+	if ((r = ide_read(blockno * BLKSECTS, addr, BLKSECTS)) < 0) {
 		panic("ide_read error!\n");
 	}
 
@@ -90,13 +90,15 @@ flush_block(void *addr)
 	if (!va_is_mapped(addr) || !va_is_dirty(addr)) {
 		return;
 	}
-	// write to blockno
-	if ((r = ide_write(blockno * 8, addr, 8)) < 0) {
-		panic("ide_write error!");
-	};
-	// Clear PTE_D bit
-	if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
-		panic("in bc_pgfault, sys_page_map: %e", r);
+	if (va_is_mapped(addr) && va_is_dirty(addr)) {
+		// write to blockno
+		if ((r = ide_write(blockno * BLKSECTS, addr, BLKSECTS)) < 0) {
+			panic("ide_write error!");
+		};
+		// Clear PTE_D bit
+		if ((r = sys_page_map(0, addr, 0, addr, uvpt[PGNUM(addr)] & PTE_SYSCALL)) < 0)
+			panic("in bc_pgfault, sys_page_map: %e", r);
+	}
 }
 
 // Test that the block cache works, by smashing the superblock and

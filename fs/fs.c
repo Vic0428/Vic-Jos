@@ -64,7 +64,7 @@ alloc_block(void)
 	// LAB 5: Your code here.
 	for (uint32_t blockno = 1; blockno < super->s_nblocks; blockno++) {
 		// Find free block
-		if (bitmap[blockno/32] & (1 << (blockno%32))) {
+		if (block_is_free(blockno)) {
 			// Mark it as used
 			bitmap[blockno/32] &= ~(1 << (blockno%32));
 			// Flush the block
@@ -147,6 +147,10 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 	if (filebno >= NDIRECT + NINDIRECT) {
 		return -E_INVAL;
 	}
+	// Check invalid pointer
+	if (!ppdiskbno) {
+		return 0;
+	}
 	if (filebno < NDIRECT) {
 		*ppdiskbno = &f->f_direct[filebno];
 	} else {
@@ -159,6 +163,8 @@ file_block_walk(struct File *f, uint32_t filebno, uint32_t **ppdiskbno, bool all
 					return -E_NO_DISK;
 				}
 			}
+			memset(diskaddr(f->f_indirect), 0, BLKSIZE);
+			flush_block(diskaddr(f->f_indirect));
 		}
 		filebno -= NDIRECT;
 		// Allocate a block to corresponding entry
@@ -190,6 +196,8 @@ file_get_block(struct File *f, uint32_t filebno, char **blk)
 		if ((*ptr = alloc_block()) < 0) {
 			return -E_NO_DISK;
 		};
+		memset(diskaddr(*ptr), 0, BLKSIZE);
+		flush_block(diskaddr(*ptr));
 	}
 	*blk = (char *)diskaddr(*ptr);
 	return 0;

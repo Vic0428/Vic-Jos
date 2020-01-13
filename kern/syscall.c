@@ -148,10 +148,12 @@ sys_env_set_trapframe(envid_t envid, struct Trapframe *tf)
 		panic("Bad address!\n");
 	}
 	e->env_tf = *tf;
-	// Set IOPL of 0
-	e->env_tf.tf_eflags |= FL_IOPL_0;
 	// Enable interrupts
+	e->env_tf.tf_eflags |= FL_IF;
+	// Set IOPL of 0
+	e->env_tf.tf_eflags &= ~FL_IOPL_3;
 	// CPL 3
+	e->env_tf.tf_cs |= 3;
 	return 0;
 }
 
