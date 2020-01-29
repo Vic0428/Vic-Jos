@@ -48,6 +48,7 @@ umain(int argc, char **argv)
 	memset(buf, 0, sizeof buf);
 	if ((r = devfile.dev_read(FVA, buf, sizeof buf)) < 0)
 		panic("file_read: %e", r);
+
 	if (strcmp(buf, msg) != 0)
 		panic("file_read returned wrong data");
 	cprintf("file_read is good\n");
@@ -62,7 +63,6 @@ umain(int argc, char **argv)
 	// FD page.
 	fdcopy = *FVA;
 	sys_page_unmap(0, FVA);
-
 	if ((r = devfile.dev_read(&fdcopy, buf, sizeof buf)) != -E_INVAL)
 		panic("serve_read does not handle stale fileids correctly: %e", r);
 	cprintf("stale fileid is good\n");
@@ -108,7 +108,6 @@ umain(int argc, char **argv)
 			panic("write /big@%d: %e", i, r);
 	}
 	close(f);
-
 	if ((f = open("/big", O_RDONLY)) < 0)
 		panic("open /big: %e", f);
 	for (i = 0; i < (NDIRECT*3)*BLKSIZE; i += sizeof(buf)) {

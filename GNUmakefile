@@ -78,7 +78,7 @@ GDB	:= $(GCCPREFIX)gdb
 
 # Native commands
 NCC	:= gcc $(CC_VER) -pipe
-NATIVE_CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall
+NATIVE_CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -I$(TOP) -MD -Wall 
 TAR	:= gtar
 PERL	:= perl
 
@@ -101,6 +101,8 @@ CFLAGS += -I$(TOP)/net/lwip/include \
 
 # Add -fno-stack-protector if the option exists.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
+
+CFLAGS += -Wno-address-of-packed-member
 
 # Common linker flags
 LDFLAGS := -m elf_i386
@@ -169,7 +171,7 @@ QEMUOPTS += $(QEMUEXTRA)
 	sed "s/localhost:1234/localhost:$(GDBPORT)/" < $^ > $@
 
 gdb:
-	$(GDB) -n -x .gdbinit
+	$(GDB) -n -tui -x .gdbinit
 
 pre-qemu: .gdbinit
 #	QEMU doesn't truncate the pcap file.  Work around this.

@@ -53,7 +53,10 @@ umain(int argc, char **argv)
 			panic("reading testshell.key: %e", n2);
 		if (n1 == 0 && n2 == 0)
 			break;
-		if (n1 != 1 || n2 != 1 || c1 != c2)
+
+		// Any ? character in testshell.key will be treated as a one-character
+		// wildcard.
+		if (n1 != 1 || n2 != 1 || (c2 != '?' && c1 != c2))
 			wrong(rfd, kfd, nloff);
 		if (c1 == '\n')
 			nloff = off+1;

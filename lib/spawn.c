@@ -132,7 +132,7 @@ spawn(const char *prog, const char **argv)
 	child_tf.tf_eflags |= FL_IOPL_3;   // devious: see user/faultio.c
 	if ((r = sys_env_set_trapframe(child, &child_tf)) < 0)
 		panic("sys_env_set_trapframe: %e", r);
-
+	
 	if ((r = sys_env_set_status(child, ENV_RUNNABLE)) < 0)
 		panic("sys_env_set_status: %e", r);
 
@@ -301,7 +301,17 @@ map_segment(envid_t child, uintptr_t va, size_t memsz,
 static int
 copy_shared_pages(envid_t child)
 {
-	// LAB 5: Your code here.
+	int r;
+	for (size_t pn = PGNUM(UTEXT); pn < PGNUM(USTACKTOP); pn++) {
+		if ((uvpd[pn >> 10] & PTE_P) && (uvpt[pn] & PTE_P)) {
+			if (uvpt[pn] & PTE_SHARE) {
+				// Map shared pages
+				if ((r = sys_page_map(0, (void*)(pn*PGSIZE), child, (void*)(pn*PGSIZE), uvpt[pn] & PTE_SYSCALL)) < 0) {
+					panic("sys_page_map error!\n");
+				}
+			}
+		}
+	}
 	return 0;
 }
 

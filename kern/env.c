@@ -117,9 +117,15 @@ envid2env(envid_t envid, struct Env **env_store, bool checkperm)
 void
 env_init(void)
 {
+	env_free_list = envs;
 	// Set up envs array
-	// LAB 3: Your code here.
-
+	for (unsigned int i = 0; i < NENV - 1; i++) {
+		envs[i].env_id = 0;
+		envs[i].env_link = &envs[i+1];
+	}
+	// The end of the link
+	envs[NENV - 1].env_id = 0;
+	envs[NENV - 1].env_link = NULL;
 	// Per-CPU part of the initialization
 	env_init_percpu();
 }
@@ -180,13 +186,15 @@ env_setup_vm(struct Env *e)
 	//	is an exception -- you need to increment env_pgdir's
 	//	pp_ref for env_free to work correctly.
 	//    - The functions in kern/pmap.h are handy.
-
-	// LAB 3: Your code here.
-
+	
+	// The VA space above UTOP is identiccal
+	e->env_pgdir = page2kva(p);
+	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
 	e->env_pgdir[PDX(UVPT)] = PADDR(e->env_pgdir) | PTE_P | PTE_U;
 
+	p->pp_ref += 1;
 	return 0;
 }
 
@@ -246,7 +254,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	// You will set e->env_tf.tf_eip later.
 
 	// Enable interrupts while in user mode.
-	// LAB 4: Your code here.
+	e->env_tf.tf_eflags = FL_IF;
 
 	// Clear the page fault handler until user installs one.
 	e->env_pgfault_upcall = 0;
@@ -255,6 +263,7 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	e->env_ipc_recving = 0;
 
 	// commit the allocation
+	// commit the alocation
 	env_free_list = e->env_link;
 	*newenv_store = e;
 
@@ -279,6 +288,17 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+	struct PageInfo *p = NULL;
+	va = ROUNDDOWN(va, PGSIZE);
+	void *end = ROUNDUP(va + len, PGSIZE);
+	// Map pages!
+	for (int i = 0; i < end - va; i += PGSIZE) {
+		p = page_alloc(ALLOC_ZERO);
+		if (!p) {
+			panic("region_alloc error!");
+		}
+		page_insert(e->env_pgdir, p, (void *)(va + i), PTE_U | PTE_W);
+	}
 }
 
 //
@@ -334,12 +354,38 @@ load_icode(struct Env *e, uint8_t *binary)
 	//  to make sure that the environment starts executing there.
 	//  What?  (See env_run() and env_pop_tf() below.)
 
-	// LAB 3: Your code here.
+	struct Elf *elf = (struct Elf *)binary;
+	// is this a valid ELF?
+	if (elf->e_magic != ELF_MAGIC) {
+		panic("elf file error");
+	}
+	// Load each program segment
+	struct Proghdr *ph = (struct Proghdr *)(binary + elf->e_phoff);
+	// End of program segment
+	struct Proghdr *eph = ph + elf->e_phnum;
 
+	// Change to user pagedir
+	lcr3(PADDR(e->env_pgdir));
+
+	for (; ph < eph; ph++) {
+		if (ph->p_type == ELF_PROG_LOAD) {
+			// Allocate memory
+			region_alloc(e, (void *)ph->p_va, ph->p_memsz);
+			// Copy memory
+			memcpy((void *)ph->p_va, (void *)(binary + ph->p_offset), (size_t)ph->p_filesz);
+			// Clear bss section
+			memset((void *)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
+		}
+	}
+
+	// Set entry point
+	(e->env_tf).tf_eip = (uintptr_t)elf->e_entry;
 	// Now map one page for the program's initial stack
 	// at virtual address USTACKTOP - PGSIZE.
+	region_alloc(e, (void *)(USTACKTOP - PGSIZE), PGSIZE);
 
-	// LAB 3: Your code here.
+	// Change back to kern pgdir
+	lcr3(PADDR(kern_pgdir));
 }
 
 //
@@ -356,6 +402,16 @@ env_create(uint8_t *binary, enum EnvType type)
 
 	// If this is the file server (type == ENV_TYPE_FS) give it I/O privileges.
 	// LAB 5: Your code here.
+	struct Env *e;
+	if (env_alloc(&e, 0) < 0) {
+		panic("env_alloc error!");
+	}
+	if (type == ENV_TYPE_FS) {
+		e->env_tf.tf_eflags |= FL_IOPL_3;
+	}
+	// Enable interrupts
+	load_icode(e, binary);
+	e->env_type = type;
 }
 
 //
@@ -486,7 +542,18 @@ env_run(struct Env *e)
 	//	e->env_tf to sensible values.
 
 	// LAB 3: Your code here.
+	if (curenv != NULL) {
+		if (curenv->env_status == ENV_RUNNING) {
+			curenv->env_status = ENV_RUNNABLE;
+		}
+	}
+	curenv = e;
+	curenv->env_status = ENV_RUNNING;
+	curenv->env_runs += 1;
+	lcr3(PADDR(curenv->env_pgdir));
+	unlock_kernel();
+	// We need to set e->env_tf.tf_eip! 
+	env_pop_tf(&curenv->env_tf);
 
-	panic("env_run not yet implemented");
 }
 

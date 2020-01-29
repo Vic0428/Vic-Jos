@@ -28,9 +28,26 @@ sched_yield(void)
 	// another CPU (env_status == ENV_RUNNING). If there are
 	// no runnable environments, simply drop through to the code
 	// below to halt the cpu.
-
-	// LAB 4: Your code here.
-
+	int i;
+	int id = curenv - envs;
+	// cprintf("CPU: %d, ENV: %x\n", cpunum(), curenv);
+	if (curenv == NULL) {
+		// Search Runnable environment
+		for (i = 0; i < NENV; i++) {
+			if (envs[i].env_status == ENV_RUNNABLE) {
+				env_run(&envs[i]);
+			}
+		}
+	} else {
+		for (i = id + 1; i < NENV + id; i++) {
+			if (envs[i % NENV].env_status == ENV_RUNNABLE) {
+				env_run(&envs[i % NENV]);
+			}
+		}
+		if (curenv->env_status == ENV_RUNNING) {
+				env_run(curenv);
+		}
+	}
 	// sched_halt never returns
 	sched_halt();
 }
@@ -75,8 +92,7 @@ sched_halt(void)
 		"movl %0, %%esp\n"
 		"pushl $0\n"
 		"pushl $0\n"
-		// Uncomment the following line after completing exercise 13
-		//"sti\n"
+		"sti\n"
 		"1:\n"
 		"hlt\n"
 		"jmp 1b\n"
