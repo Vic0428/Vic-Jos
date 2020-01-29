@@ -24,7 +24,6 @@ umain(int argc, char **argv)
 		output(ns_envid);
 		return;
 	}
-
 	for (i = 0; i < TESTOUTPUT_COUNT; i++) {
 		if ((r = sys_page_alloc(0, pkt, PTE_P|PTE_U|PTE_W)) < 0)
 			panic("sys_page_alloc: %e", r);

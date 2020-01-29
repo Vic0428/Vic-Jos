@@ -122,3 +122,8 @@ sys_time_msec(void)
 {
 	return (unsigned int) syscall(SYS_time_msec, 0, 0, 0, 0, 0, 0);
 }
+
+int
+sys_netpacket_try_send(void *addr, size_t len)  {
+	return syscall(SYS_netpacket_try_send, 1, (uint32_t)addr, len, 0, 0, 0);
+}
