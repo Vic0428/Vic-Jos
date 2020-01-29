@@ -90,7 +90,6 @@ umain(int argc, char **argv)
 
 	cprintf("Sending ARP announcement...\n");
 	announce();
-
 	while (1) {
 		envid_t whom;
 		int perm;

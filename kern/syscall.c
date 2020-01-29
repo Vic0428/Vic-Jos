@@ -370,6 +370,7 @@ sys_ipc_try_send(envid_t envid, uint32_t value, void *srcva, unsigned perm)
 	// permission error!
 	if ((uint32_t)srcva < UTOP) {
 		if (!(perm & PTE_U) || !(perm & PTE_P) || (perm & ~PTE_SYSCALL)) {
+			cprintf("%x\n", perm);
 			return -E_INVAL;
 		}
 	}
@@ -443,6 +444,12 @@ sys_netpacket_try_send(void *addr, size_t len) {
 	return e1000_transmit(addr, len);
 }
 
+static int
+sys_netpacket_try_receive(void *addr, size_t len) {
+	user_mem_assert(curenv, addr, len, PTE_U);
+	return e1000_receive(addr, len);
+}
+
 // Dispatches to the correct kernel function, passing the arguments.
 int32_t
 syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, uint32_t a5)
@@ -486,6 +493,8 @@ syscall(uint32_t syscallno, uint32_t a1, uint32_t a2, uint32_t a3, uint32_t a4, 
 		return sys_time_msec();
 	case SYS_netpacket_try_send:
 		return sys_netpacket_try_send((void *)a1, (size_t)a2);
+	case SYS_netpacket_try_receive:
+		return sys_netpacket_try_receive((void *)a1, (size_t)a2);
 	default:
 		return -E_INVAL;
 	}

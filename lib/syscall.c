@@ -127,3 +127,8 @@ int
 sys_netpacket_try_send(void *addr, size_t len)  {
 	return syscall(SYS_netpacket_try_send, 1, (uint32_t)addr, len, 0, 0, 0);
 }
+
+int
+sys_netpacket_try_receive(void *addr, size_t len)  {
+	return syscall(SYS_netpacket_try_receive, 0, (uint32_t)addr, len, 0, 0, 0);
+}
